@@ -15,6 +15,13 @@ import { Button } from "@/components/ui/button"
 import { useWorkspace } from "@/components/workspace-provider"
 import { cn } from "@/lib/utils"
 
+const dateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
+  month: "numeric",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+})
+
 export function WorkspaceSessionPage({
   projectId,
   sessionId,
@@ -158,6 +165,40 @@ export function WorkspaceSessionPage({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b border-border bg-background/95 px-2 py-4 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span>{project?.title ?? "数据查询"}</span>
+            <span>/</span>
+            <span>{currentSession.title}</span>
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-xs",
+                currentSession.isTemporary
+                  ? "bg-muted text-muted-foreground"
+                  : "bg-primary/10 text-primary"
+              )}
+            >
+              {currentSession.isTemporary ? "临时会话" : "已保存会话"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {currentSession.title}
+            </h1>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {project?.description ??
+                "在当前数据资产下继续发起查询、统计或摘要任务。"}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <span>最近更新：{formatDateTime(currentSession.updatedAt)}</span>
+            <span>创建时间：{formatDateTime(currentSession.createdAt)}</span>
+            <span>消息数：{messages.length}</span>
+          </div>
+        </div>
+      </div>
+
       <div
         ref={messagesRef}
         className={cn(
@@ -179,8 +220,11 @@ export function WorkspaceSessionPage({
                 {project?.title ?? "数据查询"}
               </p>
               <h2 className="text-2xl font-semibold tracking-normal">
-                新建会话
+                {currentSession.title}
               </h2>
+              <p className="text-sm leading-6 text-muted-foreground">
+                输入新的问题后，这个会话会继续沿用当前项目的上下文。
+              </p>
             </div>
             <Composer
               input={input}
@@ -228,4 +272,8 @@ export function WorkspaceSessionPage({
       ) : null}
     </section>
   )
+}
+
+function formatDateTime(value: string) {
+  return dateTimeFormatter.format(new Date(value))
 }
