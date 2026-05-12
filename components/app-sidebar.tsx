@@ -36,6 +36,7 @@ type SidebarNavItem = {
   showAction?: boolean
   onNewSession?: () => void
   onRename?: () => void
+  onDelete?: () => void
   items?: {
     title: string
     url: string
@@ -57,6 +58,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const router = useRouter()
   const {
     createProjectSession,
+    deleteProject,
     deleteSession,
     getSession,
     projects,
@@ -109,6 +111,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               renameProject(project.id, nextTitle)
             }
           },
+          onDelete: () => {
+            deleteProject(project.id)
+            router.replace(appRoutes.newSession.path)
+          },
           items: project.sessionIds
             .map((sessionId) => getSession(sessionId))
             .filter((session): session is NonNullable<typeof session> =>
@@ -130,10 +136,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 },
                 onDelete: () => {
                   deleteSession(session.id)
-
-                  if (decodedPathname === sessionUrl) {
-                    router.push(`/assets/my/${project.id}`)
-                  }
+                  router.replace(appRoutes.newSession.path)
                 },
               }
             }),
@@ -158,16 +161,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             },
             onDelete: () => {
               deleteSession(session.id)
-
-              if (decodedPathname === sessionUrl) {
-                router.push("/sessions")
-              }
+              router.replace(appRoutes.newSession.path)
             },
           }
         }),
       },
       {
-        title: "配置",
+        title: "配置调试",
         items: [
           {
             title: appRoutes.mcp.title,
@@ -184,7 +184,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     ],
     [
       createProjectSession,
-      decodedPathname,
+      deleteProject,
       deleteSession,
       getSession,
       projects,

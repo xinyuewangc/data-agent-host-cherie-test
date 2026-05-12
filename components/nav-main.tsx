@@ -162,6 +162,7 @@ function NavMenuItem({
             actionIcon={actionIcon}
             onNewSession={item.onNewSession}
             onRename={item.onRename}
+            onDelete={item.onDelete}
           />
         ) : null}
         <CollapsibleContent>
@@ -217,6 +218,7 @@ function NavMenuItem({
             actionIcon={actionIcon}
             onNewSession={item.onNewSession}
             onRename={item.onRename}
+            onDelete={item.onDelete}
           />
         )
       ) : null}
@@ -270,11 +272,13 @@ function ProjectActions({
   actionIcon,
   onNewSession,
   onRename,
+  onDelete,
 }: {
   itemTitle: string
   actionIcon?: ReactNode
   onNewSession?: () => void
   onRename?: () => void
+  onDelete?: () => void
 }) {
   return (
     <div className="absolute top-1.5 right-1 z-10 flex items-center gap-1 opacity-0 transition-opacity group-has-[>[data-sidebar=menu-button]:hover]/menu-item:opacity-100 peer-hover/menu-button:opacity-100 hover:opacity-100 focus-within:opacity-100 group-data-[collapsible=icon]:hidden">
@@ -293,7 +297,9 @@ function ProjectActions({
           <DropdownMenuGroup>
             <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem>
             <DropdownMenuItem>发布MCP</DropdownMenuItem>
-            <DropdownMenuItem variant="destructive">删除</DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onClick={onDelete}>
+              删除
+            </DropdownMenuItem>
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>

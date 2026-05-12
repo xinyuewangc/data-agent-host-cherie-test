@@ -200,11 +200,3 @@ export function AssistantThinking() {
     </article>
   )
 }
-
-export function createSessionId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID()
-  }
-
-  return `session-${Date.now()}`
-}

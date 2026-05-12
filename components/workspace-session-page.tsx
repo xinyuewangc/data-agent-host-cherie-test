@@ -13,6 +13,7 @@ import {
 } from "@/components/chat-elements"
 import { Button } from "@/components/ui/button"
 import { useWorkspace } from "@/components/workspace-provider"
+import { getPendingSessionPromptKey } from "@/lib/pending-session-prompt"
 import { cn } from "@/lib/utils"
 
 export function WorkspaceSessionPage({
@@ -32,6 +33,7 @@ export function WorkspaceSessionPage({
   const [visibleError, setVisibleError] = useState<string | null>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
   const persistedMessagesRef = useRef("")
+  const pendingPromptSessionRef = useRef<string | null>(null)
   const transport = useMemo(
     () => new DefaultChatTransport({ api: "/api/chat" }),
     []
@@ -100,6 +102,46 @@ export function WorkspaceSessionPage({
     persistedMessagesRef.current = signature
     updateSessionMessages(activeSessionId, messages)
   }, [activeSessionId, messages, updateSessionMessages])
+
+  useEffect(() => {
+    if (
+      !activeSessionId ||
+      activeSessionMessages?.length ||
+      pendingPromptSessionRef.current === activeSessionId ||
+      isBusy
+    ) {
+      return
+    }
+
+    const pendingPromptKey = getPendingSessionPromptKey(activeSessionId)
+    const pendingPrompt = window.sessionStorage
+      .getItem(pendingPromptKey)
+      ?.trim()
+
+    if (!pendingPrompt) {
+      return
+    }
+
+    pendingPromptSessionRef.current = activeSessionId
+    window.sessionStorage.removeItem(pendingPromptKey)
+    clearError()
+
+    void sendMessage(
+      { text: pendingPrompt },
+      {
+        body: {
+          modelId: defaultModelId,
+          sessionId: activeSessionId,
+        },
+      }
+    )
+  }, [
+    activeSessionId,
+    activeSessionMessages?.length,
+    clearError,
+    isBusy,
+    sendMessage,
+  ])
 
   if (!session) {
     return (

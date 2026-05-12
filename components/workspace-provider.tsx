@@ -13,7 +13,6 @@ import type { UIMessage } from "ai"
 
 import {
   WORKSPACE_STATE_VERSION,
-  createTextMessage,
   initialWorkspaceState,
   makeTitleFromPrompt,
   type WorkspaceProject,
@@ -29,11 +28,8 @@ type WorkspaceRoute = {
 }
 
 type WorkspaceContextValue = {
+  createTemporarySession: (options?: { prompt?: string }) => WorkspaceSession
   createProjectSession: (projectId: string) => WorkspaceSession | undefined
-  ensureTemporarySession: (options: {
-    id: string
-    prompt: string
-  }) => WorkspaceSession
   getProject: (projectId: string) => WorkspaceProject | undefined
   getRouteByPath: (pathname: string) => WorkspaceRoute | undefined
   getSession: (sessionId: string) => WorkspaceSession | undefined
@@ -43,6 +39,7 @@ type WorkspaceContextValue = {
   ) => WorkspaceSession | undefined
   isHydrated: boolean
   projects: WorkspaceProject[]
+  deleteProject: (projectId: string) => void
   deleteSession: (sessionId: string) => void
   renameProject: (projectId: string, title: string) => void
   renameSession: (sessionId: string, title: string) => void
@@ -123,50 +120,40 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [state.sessions]
   )
 
-  const ensureTemporarySession = useCallback(
-    ({ id, prompt }: { id: string; prompt: string }) => {
+  const createTemporarySession = useCallback(
+    (options?: { prompt?: string }) => {
       const now = new Date().toISOString()
-      const title = makeTitleFromPrompt(prompt)
-      const userMessage = createTextMessage(`${id}-user`, "user", prompt)
-      const existing = state.sessions[id]
-      const nextSession: WorkspaceSession = existing
-        ? {
-            ...existing,
-            title: existing.title || title,
-            updatedAt: now,
-            messages: existing.messages.length
-              ? existing.messages
-              : [userMessage],
-          }
-        : {
-            id,
-            routeSegment: id,
-            title,
-            createdAt: now,
-            updatedAt: now,
-            isTemporary: true,
-            messages: [userMessage],
-          }
+      const sessionId = createWorkspaceSessionId()
+      const title = options?.prompt
+        ? makeTitleFromPrompt(options.prompt)
+        : "临时会话"
+      const createdSession: WorkspaceSession = {
+        id: sessionId,
+        routeSegment: sessionId,
+        title,
+        createdAt: now,
+        updatedAt: now,
+        isTemporary: true,
+        messages: [],
+      }
 
       setState((current) => {
         return {
           ...current,
           sessions: {
             ...current.sessions,
-            [id]: nextSession,
+            [sessionId]: createdSession,
           },
           temporarySessionIds: [
-            id,
-            ...current.temporarySessionIds.filter(
-              (sessionId) => sessionId !== id
-            ),
+            sessionId,
+            ...current.temporarySessionIds.filter((id) => id !== sessionId),
           ],
         }
       })
 
-      return nextSession
+      return createdSession
     },
-    [state.sessions]
+    []
   )
 
   const updateSessionMessages = useCallback(
@@ -237,6 +224,32 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           project.id === projectId
             ? { ...project, title: normalizedTitle }
             : project
+        ),
+      }
+    })
+  }, [])
+
+  const deleteProject = useCallback((projectId: string) => {
+    setState((current) => {
+      const project = current.projects.find((item) => item.id === projectId)
+
+      if (!project) {
+        return current
+      }
+
+      const deletedSessionIds = new Set(project.sessionIds)
+      const sessions = Object.fromEntries(
+        Object.entries(current.sessions).filter(
+          ([sessionId]) => !deletedSessionIds.has(sessionId)
+        )
+      )
+
+      return {
+        ...current,
+        projects: current.projects.filter((item) => item.id !== projectId),
+        sessions,
+        temporarySessionIds: current.temporarySessionIds.filter(
+          (sessionId) => !deletedSessionIds.has(sessionId)
         ),
       }
     })
@@ -408,14 +421,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       .filter(Boolean)
 
     return {
+      createTemporarySession,
       createProjectSession,
-      ensureTemporarySession,
       getProject,
       getRouteByPath,
       getSession,
       getSessionByRoute,
       isHydrated,
       projects: state.projects,
+      deleteProject,
       deleteSession,
       renameProject,
       renameSession,
@@ -424,13 +438,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       updateSessionMessages,
     }
   }, [
+    createTemporarySession,
     createProjectSession,
-    ensureTemporarySession,
     getProject,
     getRouteByPath,
     getSession,
     getSessionByRoute,
     isHydrated,
+    deleteProject,
     deleteSession,
     renameProject,
     renameSession,
@@ -456,6 +471,14 @@ export function useWorkspace() {
   }
 
   return context
+}
+
+function createWorkspaceSessionId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID()
+  }
+
+  return `session-${Date.now()}`
 }
 
 function slugify(value: string) {

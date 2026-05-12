@@ -3,7 +3,7 @@ export const appRoutes = {
     path: "/sessions/new",
     title: "新建会话",
     description:
-      "发起新的 Agent 会话，后续用于查询、加工企业内部明细表并生成 artifact。",
+      "发起新的 Agent 会话，后续用于查询、加工企业内部明细表并生成 Artifacts。",
     breadcrumbs: ["新建会话"],
   },
   search: {
@@ -126,13 +126,13 @@ export const appRoutes = {
     path: "/settings/mcp",
     title: "MCP",
     description: "管理 Agent Host 可连接的 MCP 服务配置。",
-    breadcrumbs: ["配置", "MCP"],
+    breadcrumbs: ["配置调试", "MCP"],
   },
   skills: {
     path: "/settings/skills",
     title: "Skills",
     description: "管理 Agent 可调用的技能配置。",
-    breadcrumbs: ["配置", "Skills"],
+    breadcrumbs: ["配置调试", "Skills"],
   },
 } as const
 
