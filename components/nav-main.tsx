@@ -26,7 +26,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
-import { ChevronRightIcon } from "lucide-react"
+import { ChevronRightIcon, MessageSquarePlusIcon } from "lucide-react"
 
 type NavItem = {
   title: string
@@ -35,11 +35,17 @@ type NavItem = {
   collapsedIcon?: ReactNode
   isActive?: boolean
   showAction?: boolean
+  onNewSession?: () => void
+  onRename?: () => void
+  onDelete?: () => void
   items?: {
     title: string
     url: string
     icon?: ReactNode
     isActive?: boolean
+    showAction?: boolean
+    onRename?: () => void
+    onDelete?: () => void
   }[]
 }
 
@@ -70,7 +76,7 @@ export function NavMain({
             <CollapsibleTrigger
               nativeButton={false}
               render={
-                <SidebarGroupLabel className="cursor-pointer justify-between" />
+                <SidebarGroupLabel className="cursor-pointer justify-between text-sidebar-foreground/60" />
               }
             >
               <span>{section.title}</span>
@@ -80,7 +86,7 @@ export function NavMain({
               <SidebarMenu>
                 {section.items.map((item) => (
                   <NavMenuItem
-                    key={item.title}
+                    key={item.url ?? item.title}
                     item={item}
                     actionIcon={actionIcon}
                   />
@@ -96,7 +102,7 @@ export function NavMain({
             <SidebarMenu>
               {section.items.map((item) => (
                 <NavMenuItem
-                  key={item.title}
+                  key={item.url ?? item.title}
                   item={item}
                   actionIcon={actionIcon}
                 />
@@ -127,7 +133,13 @@ function NavMenuItem({
       >
         <CollapsibleTrigger
           render={
-            <SidebarMenuButton tooltip={item.title} isActive={item.isActive} />
+            <SidebarMenuButton
+              tooltip={item.title}
+              isActive={item.isActive}
+              className={
+                item.showAction && item.onNewSession ? "pr-12" : undefined
+              }
+            />
           }
         >
           {item.collapsedIcon ? (
@@ -145,19 +157,34 @@ function NavMenuItem({
           <span>{item.title}</span>
         </CollapsibleTrigger>
         {item.showAction ? (
-          <ProjectActions itemTitle={item.title} actionIcon={actionIcon} />
+          <ProjectActions
+            itemTitle={item.title}
+            actionIcon={actionIcon}
+            onNewSession={item.onNewSession}
+            onRename={item.onRename}
+          />
         ) : null}
         <CollapsibleContent>
           <SidebarMenuSub>
             {item.items?.map((subItem) => (
-              <SidebarMenuSubItem key={subItem.title}>
+              <SidebarMenuSubItem key={subItem.url}>
                 <SidebarMenuSubButton
                   isActive={subItem.isActive}
+                  className={subItem.showAction ? "pr-8" : undefined}
                   render={<Link href={subItem.url} />}
                 >
                   {subItem.icon}
                   <span>{subItem.title}</span>
                 </SidebarMenuSubButton>
+                {subItem.showAction ? (
+                  <SessionActions
+                    isSubItem
+                    itemTitle={subItem.title}
+                    actionIcon={actionIcon}
+                    onRename={subItem.onRename}
+                    onDelete={subItem.onDelete}
+                  />
+                ) : null}
               </SidebarMenuSubItem>
             ))}
           </SidebarMenuSub>
@@ -177,18 +204,38 @@ function NavMenuItem({
         <span>{item.title}</span>
       </SidebarMenuButton>
       {item.showAction ? (
-        <ProjectActions itemTitle={item.title} actionIcon={actionIcon} />
+        item.onRename || item.onDelete ? (
+          <SessionActions
+            itemTitle={item.title}
+            actionIcon={actionIcon}
+            onRename={item.onRename}
+            onDelete={item.onDelete}
+          />
+        ) : (
+          <ProjectActions
+            itemTitle={item.title}
+            actionIcon={actionIcon}
+            onNewSession={item.onNewSession}
+            onRename={item.onRename}
+          />
+        )
       ) : null}
     </SidebarMenuItem>
   )
 }
 
-function ProjectActions({
+function SessionActions({
   itemTitle,
   actionIcon,
+  isSubItem = false,
+  onDelete,
+  onRename,
 }: {
   itemTitle: string
   actionIcon?: ReactNode
+  isSubItem?: boolean
+  onDelete?: () => void
+  onRename?: () => void
 }) {
   return (
     <DropdownMenu>
@@ -196,19 +243,69 @@ function ProjectActions({
         render={
           <SidebarMenuAction
             aria-label={`${itemTitle} 更多操作`}
-            className="opacity-0 group-hover/menu-item:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100"
+            className={
+              isSubItem
+                ? "top-1 right-1 z-10 opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100"
+                : "opacity-0 peer-hover/menu-button:opacity-100 hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100"
+            }
           />
         }
       >
         {actionIcon}
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="right" align="start" className="w-32">
+      <DropdownMenuContent side="right" align="start" className="w-28">
         <DropdownMenuGroup>
-          <DropdownMenuItem>重命名</DropdownMenuItem>
-          <DropdownMenuItem>发布MCP</DropdownMenuItem>
-          <DropdownMenuItem variant="destructive">删除</DropdownMenuItem>
+          <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onClick={onDelete}>
+            删除
+          </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+function ProjectActions({
+  itemTitle,
+  actionIcon,
+  onNewSession,
+  onRename,
+}: {
+  itemTitle: string
+  actionIcon?: ReactNode
+  onNewSession?: () => void
+  onRename?: () => void
+}) {
+  return (
+    <div className="absolute top-1.5 right-1 z-10 flex items-center gap-1 opacity-0 transition-opacity group-has-[>[data-sidebar=menu-button]:hover]/menu-item:opacity-100 peer-hover/menu-button:opacity-100 hover:opacity-100 focus-within:opacity-100 group-data-[collapsible=icon]:hidden">
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <SidebarMenuAction
+              aria-label={`${itemTitle} 更多操作`}
+              className="static opacity-100"
+            />
+          }
+        >
+          {actionIcon}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="right" align="start" className="w-32">
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem>
+            <DropdownMenuItem>发布MCP</DropdownMenuItem>
+            <DropdownMenuItem variant="destructive">删除</DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {onNewSession ? (
+        <SidebarMenuAction
+          aria-label={`${itemTitle} 新建会话`}
+          className="static opacity-100"
+          onClick={onNewSession}
+        >
+          <MessageSquarePlusIcon />
+        </SidebarMenuAction>
+      ) : null}
+    </div>
   )
 }

@@ -2,9 +2,10 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 
 import { NavMain } from "@/components/nav-main"
+import { useWorkspace } from "@/components/workspace-provider"
 import {
   Sidebar,
   SidebarContent,
@@ -21,7 +22,7 @@ import {
   FolderOpenIcon,
   GalleryVerticalEndIcon,
   HardDriveIcon,
-  MessageSquareTextIcon,
+  MessageSquarePlusIcon,
   PlugIcon,
   SearchIcon,
   WrenchIcon,
@@ -33,10 +34,15 @@ type SidebarNavItem = {
   icon?: React.ReactNode
   collapsedIcon?: React.ReactNode
   showAction?: boolean
+  onNewSession?: () => void
+  onRename?: () => void
   items?: {
     title: string
     url: string
     icon?: React.ReactNode
+    showAction?: boolean
+    onRename?: () => void
+    onDelete?: () => void
   }[]
 }
 
@@ -46,144 +52,160 @@ type SidebarNavSection = {
   items: SidebarNavItem[]
 }
 
-const navSections: SidebarNavSection[] = [
-  {
-    items: [
-      {
-        title: appRoutes.newSession.title,
-        url: appRoutes.newSession.path,
-        icon: <MessageSquareTextIcon />,
-      },
-      {
-        title: appRoutes.search.title,
-        url: appRoutes.search.path,
-        icon: <SearchIcon />,
-      },
-      {
-        title: appRoutes.officialAssets.title,
-        url: appRoutes.officialAssets.path,
-        icon: <HardDriveIcon />,
-      },
-    ],
-  },
-  {
-    title: "我的数据资产",
-    collapsible: true,
-    items: [
-      {
-        title: appRoutes.requirements.title,
-        url: appRoutes.requirements.path,
-        icon: <FolderOpenIcon />,
-        collapsedIcon: <FolderIcon />,
-        showAction: true,
-        items: [
-          {
-            title: appRoutes.requirementsSession1.title,
-            url: appRoutes.requirementsSession1.path,
-          },
-          {
-            title: appRoutes.requirementsSession2.title,
-            url: appRoutes.requirementsSession2.path,
-          },
-          {
-            title: appRoutes.requirementsSession3.title,
-            url: appRoutes.requirementsSession3.path,
-          },
-        ],
-      },
-      {
-        title: appRoutes.budgetFunnel.title,
-        url: appRoutes.budgetFunnel.path,
-        icon: <FolderOpenIcon />,
-        collapsedIcon: <FolderIcon />,
-        showAction: true,
-        items: [
-          {
-            title: appRoutes.budgetFunnelSession1.title,
-            url: appRoutes.budgetFunnelSession1.path,
-          },
-          {
-            title: appRoutes.budgetFunnelSession2.title,
-            url: appRoutes.budgetFunnelSession2.path,
-          },
-          {
-            title: appRoutes.budgetFunnelSession3.title,
-            url: appRoutes.budgetFunnelSession3.path,
-          },
-        ],
-      },
-      {
-        title: appRoutes.requestExecution.title,
-        url: appRoutes.requestExecution.path,
-        icon: <FolderOpenIcon />,
-        collapsedIcon: <FolderIcon />,
-        showAction: true,
-        items: [
-          {
-            title: appRoutes.requestExecutionSession1.title,
-            url: appRoutes.requestExecutionSession1.path,
-          },
-          {
-            title: appRoutes.requestExecutionSession2.title,
-            url: appRoutes.requestExecutionSession2.path,
-          },
-          {
-            title: appRoutes.requestExecutionSession3.title,
-            url: appRoutes.requestExecutionSession3.path,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    title: "会话",
-    collapsible: true,
-    items: [
-      {
-        title: appRoutes.tempSession1.title,
-        url: appRoutes.tempSession1.path,
-      },
-      {
-        title: appRoutes.tempSession2.title,
-        url: appRoutes.tempSession2.path,
-      },
-      {
-        title: appRoutes.tempSession3.title,
-        url: appRoutes.tempSession3.path,
-      },
-    ],
-  },
-  {
-    title: "配置",
-    items: [
-      {
-        title: appRoutes.mcp.title,
-        url: appRoutes.mcp.path,
-        icon: <PlugIcon />,
-      },
-      {
-        title: appRoutes.skills.title,
-        url: appRoutes.skills.path,
-        icon: <WrenchIcon />,
-      },
-    ],
-  },
-]
-
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
+  const router = useRouter()
+  const {
+    createProjectSession,
+    deleteSession,
+    getSession,
+    projects,
+    renameProject,
+    renameSession,
+    temporarySessions,
+  } = useWorkspace()
+  const decodedPathname = decodePathname(pathname)
+  const navSections = React.useMemo<SidebarNavSection[]>(
+    () => [
+      {
+        items: [
+          {
+            title: appRoutes.newSession.title,
+            url: appRoutes.newSession.path,
+            icon: <MessageSquarePlusIcon />,
+          },
+          {
+            title: appRoutes.search.title,
+            url: appRoutes.search.path,
+            icon: <SearchIcon />,
+          },
+          {
+            title: appRoutes.officialAssets.title,
+            url: appRoutes.officialAssets.path,
+            icon: <HardDriveIcon />,
+          },
+        ],
+      },
+      {
+        title: "我的数据资产",
+        collapsible: true,
+        items: projects.map((project) => ({
+          title: project.title,
+          url: `/assets/my/${project.id}`,
+          icon: <FolderOpenIcon />,
+          collapsedIcon: <FolderIcon />,
+          showAction: true,
+          onNewSession: () => {
+            const session = createProjectSession(project.id)
+
+            if (session) {
+              router.push(`/assets/my/${project.id}/${session.routeSegment}`)
+            }
+          },
+          onRename: () => {
+            const nextTitle = window.prompt("重命名数据资产", project.title)
+
+            if (nextTitle !== null) {
+              renameProject(project.id, nextTitle)
+            }
+          },
+          items: project.sessionIds
+            .map((sessionId) => getSession(sessionId))
+            .filter((session): session is NonNullable<typeof session> =>
+              Boolean(session)
+            )
+            .map((session) => {
+              const sessionUrl = `/assets/my/${project.id}/${session.routeSegment}`
+
+              return {
+                title: session.title,
+                url: sessionUrl,
+                showAction: true,
+                onRename: () => {
+                  const nextTitle = window.prompt("重命名会话", session.title)
+
+                  if (nextTitle !== null) {
+                    renameSession(session.id, nextTitle)
+                  }
+                },
+                onDelete: () => {
+                  deleteSession(session.id)
+
+                  if (decodedPathname === sessionUrl) {
+                    router.push(`/assets/my/${project.id}`)
+                  }
+                },
+              }
+            }),
+        })),
+      },
+      {
+        title: "临时会话",
+        collapsible: true,
+        items: temporarySessions.map((session) => {
+          const sessionUrl = `/sessions/${session.routeSegment}`
+
+          return {
+            title: session.title,
+            url: sessionUrl,
+            showAction: true,
+            onRename: () => {
+              const nextTitle = window.prompt("重命名会话", session.title)
+
+              if (nextTitle !== null) {
+                renameSession(session.id, nextTitle)
+              }
+            },
+            onDelete: () => {
+              deleteSession(session.id)
+
+              if (decodedPathname === sessionUrl) {
+                router.push("/sessions")
+              }
+            },
+          }
+        }),
+      },
+      {
+        title: "配置",
+        items: [
+          {
+            title: appRoutes.mcp.title,
+            url: appRoutes.mcp.path,
+            icon: <PlugIcon />,
+          },
+          {
+            title: appRoutes.skills.title,
+            url: appRoutes.skills.path,
+            icon: <WrenchIcon />,
+          },
+        ],
+      },
+    ],
+    [
+      createProjectSession,
+      decodedPathname,
+      deleteSession,
+      getSession,
+      projects,
+      renameProject,
+      renameSession,
+      router,
+      temporarySessions,
+    ]
+  )
   const sections = navSections.map((section) => ({
     ...section,
     defaultOpen: section.collapsible ? true : undefined,
     items: section.items.map((item) => {
       const subItems = item.items?.map((subItem) => ({
         ...subItem,
-        isActive: pathname === subItem.url,
+        isActive: decodedPathname === subItem.url,
       }))
 
       return {
         ...item,
-        isActive: pathname === item.url,
+        isActive: decodedPathname === item.url,
         items: subItems,
       }
     }),
@@ -199,14 +221,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
-              tooltip="数据中心"
+              tooltip="数据查询中心"
               render={<Link href={appRoutes.newSession.path} />}
             >
               <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                 <GalleryVerticalEndIcon />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">数据中心</span>
+                <span className="truncate font-medium">数据查询中心</span>
                 <span className="truncate text-xs">Agent Host</span>
               </div>
             </SidebarMenuButton>
@@ -216,7 +238,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <div className="shrink-0">
         <NavMain sections={fixedTopSections} actionIcon={<EllipsisIcon />} />
       </div>
-      <SidebarContent className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+      <SidebarContent className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <NavMain sections={scrollableSections} actionIcon={<EllipsisIcon />} />
       </SidebarContent>
       <SidebarFooter className="shrink-0 gap-0 p-0">
@@ -224,4 +246,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarFooter>
     </Sidebar>
   )
+}
+
+function decodePathname(pathname: string) {
+  try {
+    return decodeURIComponent(pathname)
+  } catch {
+    return pathname
+  }
 }

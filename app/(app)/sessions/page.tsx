@@ -1,5 +1,5 @@
-import { PagePlaceholder } from "@/components/page-placeholder"
+import { WorkspaceSessionsPage } from "@/components/workspace-sessions-page"
 
 export default function SessionsPage() {
-  return <PagePlaceholder routeKey="sessions" />
+  return <WorkspaceSessionsPage />
 }

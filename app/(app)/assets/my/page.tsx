@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation"
+import { WorkspaceProjectsPage } from "@/components/workspace-project-page"
 
 export default function MyAssetsPage() {
-  redirect("/assets/my/requirements")
+  return <WorkspaceProjectsPage />
 }
