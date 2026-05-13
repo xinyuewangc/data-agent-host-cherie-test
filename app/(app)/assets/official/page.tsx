@@ -1,5 +1,5 @@
-import { PagePlaceholder } from "@/components/page-placeholder"
+import { OfficialAssetsPage } from "@/components/official-assets-page"
 
-export default function OfficialAssetsPage() {
-  return <PagePlaceholder routeKey="officialAssets" />
+export default function OfficialAssetsRoute() {
+  return <OfficialAssetsPage />
 }

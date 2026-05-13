@@ -25,7 +25,7 @@ export type WorkspaceState = {
   temporarySessionIds: string[]
 }
 
-export const WORKSPACE_STATE_VERSION = 2
+export const WORKSPACE_STATE_VERSION = 4
 
 export const initialWorkspaceState: WorkspaceState = {
   version: WORKSPACE_STATE_VERSION,
@@ -66,104 +66,212 @@ export const initialWorkspaceState: WorkspaceState = {
     "temp-1": temporarySession({
       id: "temp-1",
       title: "今日主体资金余额",
-      user: "帮我查一下今日各主体资金余额，并生成表格",
-      assistant:
-        "可以。当前 mock 结果建议按主体、币种、可用余额、冻结余额、日环比、更新时间输出，并把余额低于阈值的主体置顶。",
+      messages: [
+        ["user", "帮我查一下今日各主体资金余额，并生成表格。"],
+        [
+          "assistant",
+          "我先按主体维度整理，默认带上币种、可用余额、冻结余额、日环比和更新时间。你如果后面要继续排查，也可以再切到账户级明细。",
+        ],
+        ["user", "可以，先给我一个能继续筛选和导出的版本。"],
+        [
+          "assistant",
+          "已生成右侧 Artifacts：`明细表` 里包含筛选区、结果表和数据处理过程，`可视化图表` 会基于同一份余额明细同步展示结构变化。",
+        ],
+      ],
     }),
     "temp-2": temporarySession({
       id: "temp-2",
       title: "需求明细异常记录",
-      user: "把需求明细里的异常记录找出来",
-      assistant:
-        "已按超期未闭环、负责人缺失、状态回退、重复提交四类整理异常。mock 数据中超期未闭环占比最高，建议优先追踪 7 天以上未更新记录。",
+      messages: [
+        ["user", "把需求明细里的异常记录找出来。"],
+        [
+          "assistant",
+          "我先按超期未闭环、负责人缺失、状态回退和重复提交四类异常整理，可以同时把等待时长和当前负责人也带出来。",
+        ],
+        ["user", "行，右侧给我异常明细和处理过程。"],
+        [
+          "assistant",
+          "已生成右侧 Artifacts：包含异常记录明细表、异常图表表达，以及异常筛选、表格导出和数据处理过程说明。当前超期未闭环仍然是占比最高的一类。",
+        ],
+      ],
     }),
     "temp-3": temporarySession({
       id: "temp-3",
       title: "预算漏斗执行摘要",
-      user: "基于预算漏斗数据生成一份执行摘要",
-      assistant:
-        "预算从申请到消耗的主要损耗点集中在审批等待和冻结释放阶段。建议将高金额、长等待的预算单拆成待审批、待释放、待核销三张表跟进。",
+      messages: [
+        ["user", "基于预算漏斗数据生成一份执行摘要。"],
+        [
+          "assistant",
+          "我会先把申请、审批、冻结、消耗四个阶段整理成一份可追问的明细，再从这份明细里提炼转化和损耗重点。",
+        ],
+        ["user", "可以，摘要里也帮我指出主要损耗环节。"],
+        [
+          "assistant",
+          "已生成右侧 Artifacts：包含预算漏斗明细表、可视化转化表达和数据处理过程。当前损耗主要集中在审批等待与冻结释放阶段，后续可以继续追问单笔预算明细。",
+        ],
+      ],
     }),
     "requirements-session-1": projectSession({
       id: "requirements-session-1",
       projectId: "requirements",
       routeSegment: "session-1",
       title: "高优需求超期定位",
-      user: "筛出 P0/P1 需求里超期且未闭环的记录，按负责人汇总。",
-      assistant:
-        "mock 汇总：P0/P1 超期未闭环 18 条，集中在数据接入、权限审批、口径确认三类。负责人维度 Top3 分别为 A 组 7 条、B 组 5 条、C 组 3 条。",
+      messages: [
+        ["user", "筛出 P0/P1 需求里超期且未闭环的记录，按负责人汇总。"],
+        [
+          "assistant",
+          "我先按 P0/P1 + 未闭环口径筛，再补等待时长、阻塞原因和负责人组别，这样右侧结果能继续下钻到具体需求。",
+        ],
+        ["user", "可以，把未分配的也单独显出来。"],
+        [
+          "assistant",
+          "已生成右侧 Artifacts：`明细表` 里有超期需求筛选、表格和数据处理过程，`可视化图表` 会把同一份结果按负责人做对比。当前 mock 汇总 18 条，未分配记录已单独突出。",
+        ],
+      ],
     }),
     "requirements-session-2": projectSession({
       id: "requirements-session-2",
       projectId: "requirements",
       routeSegment: "session-2",
       title: "需求来源占比",
-      user: "统计本月需求来源占比，并找出增长最快的来源。",
-      assistant:
-        "mock 结果：业务运营 42%、财务分析 28%、项目管理 18%、其他 12%。增长最快的是财务分析类需求，环比提升 9 个百分点。",
+      messages: [
+        ["user", "统计本月需求来源占比，并找出增长最快的来源。"],
+        [
+          "assistant",
+          "我先按自然月口径看提单来源，并统一归类成业务运营、财务分析、项目管理、其他四类。你如果需要，我也可以顺手把高优需求数一起带上。",
+        ],
+        ["user", "带上吧，右侧先给我明细表，我后面要切图表继续看。"],
+        [
+          "assistant",
+          "已生成右侧 Artifacts：`明细表` 包含来源筛选、来源-模块表格和数据处理过程，`可视化图表` 会复用同一份明细做来源占比表达。当前 mock 结果里财务分析增长最快，环比提升 9 个百分点。",
+        ],
+      ],
     }),
     "requirements-session-3": projectSession({
       id: "requirements-session-3",
       projectId: "requirements",
       routeSegment: "session-3",
       title: "负责人待办排行",
-      user: "按负责人统计待处理需求数、平均等待天数和最早创建时间。",
-      assistant:
-        "mock 结果显示待办集中在 5 位负责人名下，其中两位平均等待超过 6 天。建议对等待天数超过 5 天的需求自动触发提醒。",
+      messages: [
+        ["user", "按负责人统计待处理需求数、平均等待天数和最早创建时间。"],
+        [
+          "assistant",
+          "我会先按未完成需求取数，再按负责人汇总待办数和平均等待。你如果希望后面做跟进，也可以把高优需求数和阻塞数一起保留在右侧结果里。",
+        ],
+        ["user", "要，加上。未分配也单独看。"],
+        [
+          "assistant",
+          "已生成右侧 Artifacts：`明细表` 里有负责人筛选、待办排行表和处理过程，`可视化图表` 是这份排行明细的另一种展示。当前有 2 位负责人平均等待超过 6 天，未分配也已单独标记。",
+        ],
+      ],
     }),
     "budget-funnel-session-1": projectSession({
       id: "budget-funnel-session-1",
       projectId: "budget-funnel",
       routeSegment: "session-1",
       title: "预算漏斗转化分析",
-      user: "从申请、审批、冻结到消耗，统计每个环节的转化率。",
-      assistant:
-        "mock 漏斗：申请 100%，审批通过 76%，冻结成功 63%，实际消耗 51%。最大流失点在审批到冻结，建议补充审批驳回原因字段。",
+      messages: [
+        ["user", "从申请、审批、冻结到消耗，统计每个环节的转化率。"],
+        [
+          "assistant",
+          "我先把阶段明细整理出来，再按同一份明细计算转化率和阶段损耗，这样后面可以继续追某个阶段的单据明细。",
+        ],
+        ["user", "好，把主要损耗环节标出来。"],
+        [
+          "assistant",
+          "已生成右侧 Artifacts：包含阶段明细表、阶段转化图表和数据处理过程。当前最大流失点在审批到冻结，建议后续继续展开审批驳回和冻结未执行原因。",
+        ],
+      ],
     }),
     "budget-funnel-session-2": projectSession({
       id: "budget-funnel-session-2",
       projectId: "budget-funnel",
       routeSegment: "session-2",
       title: "冻结预算原因追踪",
-      user: "找出冻结预算超过 14 天仍未释放或消耗的记录。",
-      assistant:
-        "mock 结果：超过 14 天的冻结预算 23 笔，金额主要集中在渠道投放和联运结算。建议按金额降序人工复核前 10 笔。",
+      messages: [
+        ["user", "找出冻结预算超过 14 天仍未释放或消耗的记录。"],
+        [
+          "assistant",
+          "我会先按冻结时长做筛选，再保留渠道、金额、当前阶段和风险等级，方便右侧继续筛选和导出。",
+        ],
+        ["user", "可以，按金额高的排前面。"],
+        [
+          "assistant",
+          "已生成右侧 Artifacts：包含冻结预算异常明细表、风险图表和数据处理过程。当前超过 14 天的冻结预算共有 23 笔，已按金额降序整理。",
+        ],
+      ],
     }),
     "budget-funnel-session-3": projectSession({
       id: "budget-funnel-session-3",
       projectId: "budget-funnel",
       routeSegment: "session-3",
       title: "渠道预算消耗预警",
-      user: "检查渠道预算消耗进度，标出低于计划进度 20% 的渠道。",
-      assistant:
-        "mock 预警：渠道 C、渠道 F、渠道 H 消耗显著低于计划。渠道 C 预算大但投放启动晚，建议拆分展示启动延迟和转化偏低两类原因。",
+      messages: [
+        ["user", "检查渠道预算消耗进度，标出低于计划进度 20% 的渠道。"],
+        [
+          "assistant",
+          "我会把计划进度、实际进度、偏差和预算规模一起整理出来，这样右侧既能预警，也能继续追某个渠道的明细。",
+        ],
+        ["user", "好的，帮我把预警渠道优先排前面。"],
+        [
+          "assistant",
+          "已生成右侧 Artifacts：包含渠道预警明细表、进度差异图表和处理过程。当前预警渠道是 C、F、H，已优先展示偏差最大的渠道。",
+        ],
+      ],
     }),
     "request-execution-session-1": projectSession({
       id: "request-execution-session-1",
       projectId: "request-execution",
       routeSegment: "session-1",
       title: "需求单执行 SLA",
-      user: "统计需求单从创建到完成的 SLA 达成率，按部门拆分。",
-      assistant:
-        "mock SLA 达成率 83%。研发支持、数据平台、财务分析三个部门中，数据平台达成率最低，主要原因是上游表权限等待。",
+      messages: [
+        ["user", "统计需求单从创建到完成的 SLA 达成率，按部门拆分。"],
+        [
+          "assistant",
+          "我先按部门整理完成耗时和达成率，再保留主要原因字段，方便低达标部门继续追问题来源。",
+        ],
+        ["user", "好，低于平均值的部门要能一眼看到。"],
+        [
+          "assistant",
+          "已生成右侧 Artifacts：包含部门 SLA 明细表、达成率图表和数据处理过程。当前整体达成率 83%，数据平台已经被标成低于平均值的重点部门。",
+        ],
+      ],
     }),
     "request-execution-session-2": projectSession({
       id: "request-execution-session-2",
       projectId: "request-execution",
       routeSegment: "session-2",
       title: "部门完成率对比",
-      user: "按部门统计本月需求单完成率、进行中数量和阻塞数量。",
-      assistant:
-        "mock 对比：财务分析完成率 91%，研发支持 84%，数据平台 72%。数据平台阻塞数量最高，建议进一步拆出阻塞归因。",
+      messages: [
+        ["user", "按部门统计本月需求单完成率、进行中数量和阻塞数量。"],
+        [
+          "assistant",
+          "我会把完成率、进行中数量和阻塞数量放在同一份部门明细里，这样右侧可以直接筛出高阻塞部门。",
+        ],
+        ["user", "好，后面我可能还要继续看阻塞原因。"],
+        [
+          "assistant",
+          "已生成右侧 Artifacts：包含部门完成率明细表、对比图表和数据处理过程。当前数据平台完成率最低且阻塞数最高，适合继续下钻阻塞归因。",
+        ],
+      ],
     }),
     "request-execution-session-3": projectSession({
       id: "request-execution-session-3",
       projectId: "request-execution",
       routeSegment: "session-3",
       title: "阻塞原因归类",
-      user: "把所有阻塞中的需求单按原因归类，并给出处理建议。",
-      assistant:
-        "mock 阻塞原因：权限等待 38%、口径未确认 27%、排期冲突 21%、数据缺失 14%。建议把权限等待类自动同步到 MCP 权限申请流。",
+      messages: [
+        ["user", "把所有阻塞中的需求单按原因归类，并给出处理建议。"],
+        [
+          "assistant",
+          "我先把阻塞原因统一归类，再整理成可继续筛选的明细表，这样你后面能直接只看某一类阻塞。",
+        ],
+        ["user", "行，建议动作也一起带出来。"],
+        [
+          "assistant",
+          "已生成右侧 Artifacts：包含阻塞原因明细表、结构图表和数据处理过程。当前权限等待占比最高，建议动作已经一并放入结果中。",
+        ],
+      ],
     }),
   },
 }
@@ -195,11 +303,13 @@ function temporarySession({
   title,
   user,
   assistant,
+  messages,
 }: {
   id: string
   title: string
-  user: string
-  assistant: string
+  user?: string
+  assistant?: string
+  messages?: Array<[role: "user" | "assistant", text: string]>
 }): WorkspaceSession {
   return {
     id,
@@ -208,10 +318,7 @@ function temporarySession({
     createdAt: "2026-05-11T09:00:00.000Z",
     updatedAt: "2026-05-11T09:15:00.000Z",
     isTemporary: true,
-    messages: [
-      createTextMessage(`${id}-user`, "user", user),
-      createTextMessage(`${id}-assistant`, "assistant", assistant),
-    ],
+    messages: createSessionMessages(id, messages, user, assistant),
   }
 }
 
@@ -222,13 +329,15 @@ function projectSession({
   title,
   user,
   assistant,
+  messages,
 }: {
   id: string
   projectId: string
   routeSegment: string
   title: string
-  user: string
-  assistant: string
+  user?: string
+  assistant?: string
+  messages?: Array<[role: "user" | "assistant", text: string]>
 }): WorkspaceSession {
   return {
     id,
@@ -238,9 +347,24 @@ function projectSession({
     createdAt: "2026-05-11T09:00:00.000Z",
     updatedAt: "2026-05-11T09:15:00.000Z",
     isTemporary: false,
-    messages: [
-      createTextMessage(`${id}-user`, "user", user),
-      createTextMessage(`${id}-assistant`, "assistant", assistant),
-    ],
+    messages: createSessionMessages(id, messages, user, assistant),
   }
+}
+
+function createSessionMessages(
+  id: string,
+  messages: Array<[role: "user" | "assistant", text: string]> | undefined,
+  fallbackUser = "",
+  fallbackAssistant = ""
+) {
+  const normalizedMessages =
+    messages ??
+    ([
+      ["user", fallbackUser],
+      ["assistant", fallbackAssistant],
+    ] as Array<[role: "user" | "assistant", text: string]>)
+
+  return normalizedMessages.map(([role, text], index) =>
+    createTextMessage(`${id}-${role}-${index + 1}`, role, text)
+  )
 }
