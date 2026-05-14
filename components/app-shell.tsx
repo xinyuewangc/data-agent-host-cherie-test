@@ -72,6 +72,7 @@ import {
 import { TablePaginationFooter } from "@/components/table-pagination-footer"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { appRoutes, getRouteByPath } from "@/lib/navigation"
+import { officialAssets, type OfficialAssetRecord } from "@/lib/official-assets"
 import { cn } from "@/lib/utils"
 import type { WorkspaceSession } from "@/lib/workspace-mock"
 import {
@@ -115,6 +116,22 @@ function AppShellContent({ children }: { children: ReactNode }) {
     null
   )
   const isArtifactOpen = currentSession?.id === artifactSessionId
+  const lastAutoOpenedArtifactKeyRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!currentSession || !sessionHasGeneratedArtifacts(currentSession)) {
+      return
+    }
+
+    const autoOpenKey = `${currentSession.id}:${currentSession.updatedAt}`
+
+    if (lastAutoOpenedArtifactKeyRef.current === autoOpenKey) {
+      return
+    }
+
+    lastAutoOpenedArtifactKeyRef.current = autoOpenKey
+    setArtifactSessionId(currentSession.id)
+  }, [currentSession])
 
   return (
     <SidebarProvider className="h-svh min-h-0 overflow-hidden">
@@ -178,6 +195,7 @@ function AppShellContent({ children }: { children: ReactNode }) {
               </div>
               <div className="min-h-0 min-w-0 overflow-hidden">
                 <SessionArtifactPanel
+                  key={`${currentSession.id}:${isArtifactOpen ? "open" : "closed"}`}
                   isOpen={isArtifactOpen}
                   session={currentSession}
                 />
@@ -321,9 +339,10 @@ function SessionArtifactPanel({
 }) {
   const [isPickingArtifactContext, setIsPickingArtifactContext] =
     useState(false)
-  const [activeTab, setActiveTab] = useState<ArtifactTabId>("table")
-  const [activeProcessTab, setActiveProcessTab] =
-    useState<ArtifactProcessTabId>("flow")
+  const [activeArtifactView, setActiveArtifactView] =
+    useState<ArtifactViewId>("detail")
+  const [activeDetailTab, setActiveDetailTab] =
+    useState<ArtifactDetailTabId>("data")
   const artifact = getArtifactContent(session)
   const tableFilterFields = artifact.table.filterFields
   const hasTableFilters = tableFilterFields.length > 0
@@ -385,15 +404,16 @@ function SessionArtifactPanel({
       ? selectedFlowNodeId
       : null
   const selectedFlowNode = useMemo(
-    () =>
-      flowBoard.nodes.find((node) => node.id === activeFlowNodeId) ??
-      null,
+    () => flowBoard.nodes.find((node) => node.id === activeFlowNodeId) ?? null,
     [activeFlowNodeId, flowBoard.nodes]
   )
   const selectedFlowNodeSummary = useMemo(
     () =>
       selectedFlowNode
-        ? createSelectedFlowNodeSummary(selectedFlowNode, artifact.process.graph)
+        ? createSelectedFlowNodeSummary(
+            selectedFlowNode,
+            artifact.process.graph
+          )
         : null,
     [selectedFlowNode, artifact.process.graph]
   )
@@ -415,6 +435,8 @@ function SessionArtifactPanel({
       ),
     [filteredTableRows, artifact.visual, artifact.table.columns]
   )
+  const isFlowDetailView =
+    activeArtifactView === "detail" && activeDetailTab === "flow"
 
   useEffect(() => {
     const element = flowViewportRef.current
@@ -499,13 +521,14 @@ function SessionArtifactPanel({
       0
     )
     const nextInsetX = Math.max((viewport.clientWidth - nextBoardWidth) / 2, 0)
-    const nextInsetY = Math.max((viewport.clientHeight - nextBoardHeight) / 2, 0)
+    const nextInsetY = Math.max(
+      (viewport.clientHeight - nextBoardHeight) / 2,
+      0
+    )
     const offsetX = viewport.clientWidth / 2
     const offsetY = viewport.clientHeight / 2
-    const worldX =
-      (viewport.scrollLeft + offsetX - currentInsetX) / currentZoom
-    const worldY =
-      (viewport.scrollTop + offsetY - currentInsetY) / currentZoom
+    const worldX = (viewport.scrollLeft + offsetX - currentInsetX) / currentZoom
+    const worldY = (viewport.scrollTop + offsetY - currentInsetY) / currentZoom
 
     setFlowZoom(safeNextZoom)
 
@@ -537,8 +560,7 @@ function SessionArtifactPanel({
 
     event.preventDefault()
 
-    const delta =
-      event.deltaMode === 1 ? event.deltaY * 12 : event.deltaY
+    const delta = event.deltaMode === 1 ? event.deltaY * 12 : event.deltaY
     const nextZoom = flowZoom - delta * 0.001
 
     updateFlowZoom(nextZoom)
@@ -605,16 +627,35 @@ function SessionArtifactPanel({
           </DropdownMenu>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5">
-        <div className="flex w-full min-w-0 flex-col gap-3">
-          <section className="flex min-w-0 items-center py-1">
+      <div
+        className={cn(
+          "min-h-0 flex-1 p-4 lg:p-5",
+          isFlowDetailView ? "overflow-hidden" : "overflow-y-auto"
+        )}
+      >
+        <div
+          className={cn(
+            "flex w-full min-w-0 flex-col gap-4",
+            isFlowDetailView && "min-h-full"
+          )}
+        >
+          <section className="-mx-4 flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-border px-4 pb-4 lg:-mx-5 lg:px-5">
+            <h3 className="text-lg font-semibold tracking-tight">
+              {activeArtifactView === "detail" ? "明细表" : "可视化图表"}
+            </h3>
             <Tabs
-              value={activeTab}
-              onValueChange={(value) => setActiveTab(value as ArtifactTabId)}
+              value={activeArtifactView}
+              onValueChange={(value) =>
+                setActiveArtifactView(value as ArtifactViewId)
+              }
             >
-              <TabsList className="w-fit">
-                {artifactTabs.map((tab) => (
-                  <TabsTrigger key={tab.id} value={tab.id}>
+              <TabsList className="h-auto rounded-lg bg-muted p-0.5">
+                {artifactViewTabs.map((tab) => (
+                  <TabsTrigger
+                    key={tab.id}
+                    value={tab.id}
+                    className="rounded-md px-2.5 py-1 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+                  >
                     {tab.label}
                   </TabsTrigger>
                 ))}
@@ -622,415 +663,418 @@ function SessionArtifactPanel({
             </Tabs>
           </section>
 
-          {activeTab === "table" ? (
-            <div className="grid gap-3">
-              {hasTableFilters ? (
-                <section className="rounded-xl border border-border bg-background p-4 shadow-sm">
-                  <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
-                    {visibleTableFilterFields.map((field) => (
-                      <label key={field.id} className="space-y-2">
-                        <span className="text-sm font-medium text-foreground/70">
-                          {field.label}
-                        </span>
-                        {field.type === "text" ? (
-                          <Input
-                            value={draftTableFilters[field.id] ?? ""}
-                            onChange={(event) =>
-                              handleTableFilterChange(
-                                field.id,
-                                event.target.value
-                              )
-                            }
-                            placeholder={field.placeholder}
-                            className="h-8 rounded-lg px-2.5 text-sm placeholder:text-muted-foreground"
-                          />
-                        ) : (
-                          <Select
-                            value={draftTableFilters[field.id] ?? ""}
-                            onValueChange={(value) =>
-                              handleTableFilterChange(field.id, value ?? "")
+          {activeArtifactView === "detail" ? (
+            <section
+              className={cn(
+                "space-y-4",
+                isFlowDetailView && "flex min-h-0 flex-1 flex-col"
+              )}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Tabs
+                  value={activeDetailTab}
+                  onValueChange={(value) =>
+                    setActiveDetailTab(value as ArtifactDetailTabId)
+                  }
+                >
+                  <TabsList className="h-auto rounded-lg bg-muted p-0.5">
+                    {artifactDetailTabs.map((tab) => (
+                      <TabsTrigger
+                        key={tab.id}
+                        value={tab.id}
+                        className="rounded-md px-2.5 py-1 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+                      >
+                        {tab.label}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+                {activeDetailTab === "data" ? (
+                  <Button
+                    type="button"
+                    className="h-8 gap-2 rounded-lg px-3 text-sm"
+                    onClick={handleExportRows}
+                  >
+                    <DownloadIcon className="size-4" />
+                    导出明细表
+                  </Button>
+                ) : null}
+              </div>
+              {activeDetailTab === "data" ? (
+                <div className="grid gap-3">
+                  {hasTableFilters ? (
+                    <section className="rounded-xl border border-border bg-muted/10 p-4">
+                      <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+                        {visibleTableFilterFields.map((field) => (
+                          <label key={field.id} className="space-y-2">
+                            <span className="text-sm font-medium text-foreground/70">
+                              {field.label}
+                            </span>
+                            {field.type === "text" ? (
+                              <Input
+                                value={draftTableFilters[field.id] ?? ""}
+                                onChange={(event) =>
+                                  handleTableFilterChange(
+                                    field.id,
+                                    event.target.value
+                                  )
+                                }
+                                placeholder={field.placeholder}
+                                className="h-8 rounded-lg px-2.5 text-sm placeholder:text-muted-foreground"
+                              />
+                            ) : (
+                              <Select
+                                value={draftTableFilters[field.id] ?? ""}
+                                onValueChange={(value) =>
+                                  handleTableFilterChange(field.id, value ?? "")
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue
+                                    placeholder={field.placeholder}
+                                  />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="">
+                                    {field.placeholder}
+                                  </SelectItem>
+                                  {(field.options ?? []).map((option) => (
+                                    <SelectItem key={option} value={option}>
+                                      {option}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                      <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        {hasExpandableFilters ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-8 w-fit gap-1.5 px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
+                            onClick={() =>
+                              setExpandedTableFilters((current) => ({
+                                ...current,
+                                [artifact.title]: !isTableFilterExpanded,
+                              }))
                             }
                           >
-                            <SelectTrigger>
-                              <SelectValue placeholder={field.placeholder} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="">{field.placeholder}</SelectItem>
-                              {(field.options ?? []).map((option) => (
-                                <SelectItem key={option} value={option}>
-                                  {option}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                      </label>
-                    ))}
-                  </div>
-                  <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    {hasExpandableFilters ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="h-8 w-fit gap-1.5 px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
-                        onClick={() =>
-                          setExpandedTableFilters((current) => ({
-                            ...current,
-                            [artifact.title]: !isTableFilterExpanded,
-                          }))
-                        }
-                      >
-                        {isTableFilterExpanded ? (
-                          <ChevronUpIcon className="size-3.5" />
+                            {isTableFilterExpanded ? (
+                              <ChevronUpIcon className="size-3.5" />
+                            ) : (
+                              <ChevronDownIcon className="size-3.5" />
+                            )}
+                            {isTableFilterExpanded
+                              ? "收起筛选"
+                              : `展开更多筛选 +${tableFilterFields.length - filterPreviewCount}`}
+                          </Button>
                         ) : (
-                          <ChevronDownIcon className="size-3.5" />
+                          <div />
                         )}
-                        {isTableFilterExpanded
-                          ? "收起筛选"
-                          : `展开更多筛选 +${tableFilterFields.length - filterPreviewCount}`}
-                      </Button>
-                    ) : (
-                      <div />
-                    )}
-                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9 gap-2"
-                        onClick={handleResetFilters}
-                      >
-                        <RotateCcwIcon className="size-4" />
-                        重置
-                      </Button>
-                      <Button
-                        type="button"
-                        className="h-9 gap-2"
-                        onClick={handleApplyFilters}
-                      >
-                        <SearchIcon className="size-4" />
-                        查询
-                      </Button>
-                    </div>
-                  </div>
-                </section>
-              ) : null}
+                        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 gap-2 rounded-lg px-3 text-sm"
+                            onClick={handleResetFilters}
+                          >
+                            <RotateCcwIcon className="size-4" />
+                            重置
+                          </Button>
+                          <Button
+                            type="button"
+                            className="h-8 gap-2 rounded-lg px-3 text-sm"
+                            onClick={handleApplyFilters}
+                          >
+                            <SearchIcon className="size-4" />
+                            查询
+                          </Button>
+                        </div>
+                      </div>
+                    </section>
+                  ) : null}
 
-              <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-                  <h4 className="text-sm font-medium">明细表结果</h4>
-                  <div className="flex items-center gap-2 lg:justify-end">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-8 gap-2 rounded-lg px-3 text-sm"
-                      onClick={handleExportRows}
-                    >
-                      <DownloadIcon className="size-4" />
-                      导出明细表
-                    </Button>
-                  </div>
-                </div>
-                <div className="overflow-auto p-2">
-                  <Table className="text-xs">
-                    <TableHeader>
-                      <TableRow>
-                        {artifact.table.columns.map((column) => (
-                          <TableHead key={column}>{column}</TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredTableRows.length ? (
-                        paginatedTableRows.map((row, rowIndex) => (
-                          <TableRow key={`${artifact.title}-${rowIndex}`}>
-                            {artifact.table.columns.map((column, columnIndex) => (
-                              <TableCell
-                                key={`${rowIndex}-${column}`}
-                                className={cn(
-                                  columnIndex === 0 ? "font-medium" : undefined,
-                                  column === "风险级别" || column === "状态"
-                                    ? "text-foreground"
-                                    : undefined
-                                )}
-                              >
-                                {row[column]}
-                              </TableCell>
+                  <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+                    <div className="overflow-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent">
+                            {artifact.table.columns.map((column) => (
+                              <TableHead key={column}>{column}</TableHead>
                             ))}
                           </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell
-                            colSpan={artifact.table.columns.length}
-                            className="h-28 text-center text-sm text-muted-foreground"
-                          >
-                            当前筛选条件下暂无结果
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-                <TablePaginationFooter
-                  currentPage={safeTablePage}
-                  onPageChange={setCurrentTablePage}
-                  pageSize={tablePageSize}
-                  totalItems={filteredTableRows.length}
-                />
-              </section>
-
-              <section className="rounded-xl border border-border bg-background p-4 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h4 className="text-sm font-medium">数据处理过程</h4>
-                  <div className="rounded-lg border border-border bg-muted/30 p-1">
-                    <div className="flex flex-wrap gap-1">
-                      {[
-                        { id: "flow", label: "数据流转" },
-                        { id: "rules", label: "处理规则" },
-                        { id: "sql", label: "SQL" },
-                      ].map((item) => (
-                        <Button
-                          key={item.id}
-                          type="button"
-                          variant="ghost"
-                          className={cn(
-                            "h-8 rounded-md px-2.5 text-xs",
-                            activeProcessTab === item.id
-                              ? "bg-background text-foreground shadow-sm hover:bg-background"
-                              : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
+                        </TableHeader>
+                        <TableBody>
+                          {filteredTableRows.length ? (
+                            paginatedTableRows.map((row, rowIndex) => (
+                              <TableRow key={`${artifact.title}-${rowIndex}`}>
+                                {artifact.table.columns.map(
+                                  (column, columnIndex) => (
+                                    <TableCell
+                                      key={`${rowIndex}-${column}`}
+                                      className={cn(
+                                        columnIndex === 0
+                                          ? "font-medium"
+                                          : undefined,
+                                        column === "风险级别" ||
+                                          column === "状态"
+                                          ? "text-foreground"
+                                          : undefined
+                                      )}
+                                    >
+                                      {row[column]}
+                                    </TableCell>
+                                  )
+                                )}
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow className="hover:bg-transparent">
+                              <TableCell
+                                colSpan={artifact.table.columns.length}
+                                className="h-28 text-center text-sm text-muted-foreground"
+                              >
+                                当前筛选条件下暂无结果
+                              </TableCell>
+                            </TableRow>
                           )}
-                          onClick={() =>
-                            setActiveProcessTab(
-                              item.id as ArtifactProcessTabId
-                            )
-                          }
-                        >
-                          {item.label}
-                        </Button>
-                      ))}
+                        </TableBody>
+                      </Table>
                     </div>
-                  </div>
+                    <TablePaginationFooter
+                      currentPage={safeTablePage}
+                      onPageChange={setCurrentTablePage}
+                      pageSize={tablePageSize}
+                      totalItems={filteredTableRows.length}
+                    />
+                  </section>
                 </div>
-                {activeProcessTab === "flow" ? (
-                  <div
-                    className={cn(
-                      "mt-4 grid gap-4 transition-[grid-template-columns] duration-300 ease-out",
-                      selectedFlowNode
-                        ? "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px]"
-                        : "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_0px]"
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <div className="relative">
+              ) : null}
+
+              {activeDetailTab === "flow" ? (
+                <div
+                  className={cn(
+                    "min-h-0 grid gap-4 transition-[grid-template-columns] duration-300 ease-out",
+                    isFlowDetailView && "flex-1",
+                    selectedFlowNode
+                      ? "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px]"
+                      : "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_0px]"
+                  )}
+                >
+                  <div className="min-h-0 min-w-0">
+                    <div className="relative flex min-h-0 flex-1">
+                      <div
+                        ref={flowViewportRef}
+                        onWheel={handleFlowViewportWheel}
+                        className="relative h-full min-h-[560px] flex-1 overflow-auto rounded-xl border border-dashed border-border bg-[radial-gradient(circle,_rgba(0,0,0,0.06)_1px,_transparent_1px)] [background-size:16px_16px] p-4"
+                      >
                         <div
-                          ref={flowViewportRef}
-                          onWheel={handleFlowViewportWheel}
-                          className="relative overflow-auto rounded-xl border border-dashed border-border bg-[radial-gradient(circle,_rgba(0,0,0,0.06)_1px,_transparent_1px)] [background-size:16px_16px] p-4"
+                          className="relative flex items-start justify-center rounded-[28px]"
+                          style={{
+                            width: Math.max(
+                              flowBoard.width * flowZoom,
+                              flowViewportWidth
+                            ),
+                            height: Math.max(
+                              flowBoard.height * flowZoom,
+                              flowViewportHeight
+                            ),
+                          }}
                         >
                           <div
-                            className="relative flex items-center justify-center rounded-[28px]"
+                            className="relative origin-top-left"
                             style={{
-                              width: Math.max(
-                                flowBoard.width * flowZoom,
-                                flowViewportWidth
-                              ),
-                              height: Math.max(
-                                flowBoard.height * flowZoom,
-                                flowViewportHeight
-                              ),
+                              width: flowBoard.width,
+                              height: flowBoard.height,
+                              transform: `scale(${flowZoom})`,
                             }}
                           >
-                            <div
-                              className="relative origin-top-left"
-                              style={{
-                                width: flowBoard.width,
-                                height: flowBoard.height,
-                                transform: `scale(${flowZoom})`,
-                              }}
+                            <svg
+                              className="pointer-events-none absolute inset-0 z-10"
+                              width={flowBoard.width}
+                              height={flowBoard.height}
+                              viewBox={`0 0 ${flowBoard.width} ${flowBoard.height}`}
+                              fill="none"
                             >
-                              <svg
-                                className="pointer-events-none absolute inset-0 z-10"
-                                width={flowBoard.width}
-                                height={flowBoard.height}
-                                viewBox={`0 0 ${flowBoard.width} ${flowBoard.height}`}
-                                fill="none"
-                              >
-                                {flowBoard.edges.map((edge) => (
-                                  <Fragment key={edge.id}>
-                                    {edge.paths.map((path) => (
-                                      <Fragment key={path.id}>
-                                        <path
-                                          d={path.d}
-                                          stroke={path.stroke}
-                                          strokeWidth="2"
-                                          strokeOpacity="0.18"
-                                          strokeDasharray="6 10"
-                                          strokeLinecap="round"
+                              {flowBoard.edges.map((edge) => (
+                                <Fragment key={edge.id}>
+                                  {edge.paths.map((path) => (
+                                    <Fragment key={path.id}>
+                                      <path
+                                        d={path.d}
+                                        stroke={path.stroke}
+                                        strokeWidth="2"
+                                        strokeOpacity="0.18"
+                                        strokeDasharray="6 10"
+                                        strokeLinecap="round"
+                                      />
+                                      <path
+                                        d={path.d}
+                                        stroke={path.stroke}
+                                        strokeWidth="2.4"
+                                        strokeDasharray="10 14"
+                                        strokeLinecap="round"
+                                      >
+                                        <animate
+                                          attributeName="stroke-dashoffset"
+                                          from="24"
+                                          to="0"
+                                          dur="1.15s"
+                                          repeatCount="indefinite"
                                         />
-                                        <path
-                                          d={path.d}
-                                          stroke={path.stroke}
-                                          strokeWidth="2.4"
-                                          strokeDasharray="10 14"
-                                          strokeLinecap="round"
-                                        >
-                                          <animate
-                                            attributeName="stroke-dashoffset"
-                                            from="24"
-                                            to="0"
-                                            dur="1.15s"
-                                            repeatCount="indefinite"
-                                          />
-                                        </path>
-                                        <circle r="3.5" fill={path.stroke}>
-                                          <animateMotion
-                                            dur="2.6s"
-                                            repeatCount="indefinite"
-                                            path={path.d}
-                                          />
-                                        </circle>
-                                      </Fragment>
-                                    ))}
-                                    <path
-                                      d={edge.axisPath}
-                                      stroke="rgba(17,24,39,0.18)"
-                                      strokeWidth="1.5"
-                                      strokeDasharray="2 10"
-                                      strokeLinecap="round"
-                                    />
-                                  </Fragment>
-                                ))}
-                              </svg>
+                                      </path>
+                                      <circle r="3.5" fill={path.stroke}>
+                                        <animateMotion
+                                          dur="2.6s"
+                                          repeatCount="indefinite"
+                                          path={path.d}
+                                        />
+                                      </circle>
+                                    </Fragment>
+                                  ))}
+                                  <path
+                                    d={edge.axisPath}
+                                    stroke="rgba(17,24,39,0.18)"
+                                    strokeWidth="1.5"
+                                    strokeDasharray="2 10"
+                                    strokeLinecap="round"
+                                  />
+                                </Fragment>
+                              ))}
+                            </svg>
 
-                              {flowBoard.nodes.map((node) => (
-                                <button
-                                  key={node.id}
-                                  type="button"
-                                  className={cn(
-                                    "absolute z-30 rounded-2xl border bg-background px-4 py-4 text-left shadow-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-md",
-                                    getFlowToneCardClass(node.tone),
-                                    selectedFlowNode?.id === node.id &&
-                                      "ring-2 ring-foreground/10"
-                                  )}
-                                  style={{
-                                    left: node.x,
-                                    top: node.y,
-                                    width: node.width,
-                                    minHeight: node.height,
-                                  }}
-                                  onClick={() =>
-                                    setSelectedFlowNodeId((current) =>
-                                      current === node.id ? null : node.id
-                                    )
-                                  }
-                                >
-                                  <span className="absolute -left-1.5 top-8 size-3 rounded-full border border-background bg-background shadow-sm" />
-                                  <span className="absolute -right-1.5 top-8 size-3 rounded-full border border-background bg-background shadow-sm" />
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="space-y-1">
-                                      <div className="flex items-center gap-2">
-                                        <span
-                                          className={cn(
-                                            "size-2.5 rounded-full",
-                                            getFlowToneDotClass(node.tone)
-                                          )}
-                                        />
-                                        <div className="text-sm font-medium">
-                                          {node.title}
-                                        </div>
-                                      </div>
-                                      <div className="text-xs leading-5 text-muted-foreground">
-                                        {node.subtitle}
+                            {flowBoard.nodes.map((node) => (
+                              <button
+                                key={node.id}
+                                type="button"
+                                className={cn(
+                                  "absolute z-30 rounded-2xl border bg-background px-4 py-4 text-left shadow-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-md",
+                                  getFlowToneCardClass(node.tone),
+                                  selectedFlowNode?.id === node.id &&
+                                    "ring-2 ring-foreground/10"
+                                )}
+                                style={{
+                                  left: node.x,
+                                  top: node.y,
+                                  width: node.width,
+                                  minHeight: node.height,
+                                }}
+                                onClick={() =>
+                                  setSelectedFlowNodeId((current) =>
+                                    current === node.id ? null : node.id
+                                  )
+                                }
+                              >
+                                <span className="absolute top-8 -left-1.5 size-3 rounded-full border border-background bg-background shadow-sm" />
+                                <span className="absolute top-8 -right-1.5 size-3 rounded-full border border-background bg-background shadow-sm" />
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={cn(
+                                          "size-2.5 rounded-full",
+                                          getFlowToneDotClass(node.tone)
+                                        )}
+                                      />
+                                      <div className="text-sm font-medium">
+                                        {node.title}
                                       </div>
                                     </div>
-                                    <Badge
-                                      variant="outline"
-                                      className="shrink-0 bg-background/90"
-                                    >
-                                      {getFlowToneLabel(node.tone)}
-                                    </Badge>
+                                    <div className="text-xs leading-5 text-muted-foreground">
+                                      {node.subtitle}
+                                    </div>
                                   </div>
-                                </button>
-                              ))}
-                            </div>
+                                  <Badge
+                                    variant="outline"
+                                    className="shrink-0 bg-background/90"
+                                  >
+                                    {getFlowToneLabel(node.tone)}
+                                  </Badge>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pointer-events-none absolute inset-0 z-40">
+                        <div className="absolute top-4 right-4">
+                          <div className="flex flex-wrap items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-2 shadow-sm backdrop-blur">
+                            {(
+                              [
+                                ["source", "数据来源"],
+                                ["process", "处理节点"],
+                                ["aggregate", "合并处理"],
+                                ["result", "最终结果"],
+                              ] as const
+                            ).map(([tone, label]) => (
+                              <div
+                                key={tone}
+                                className="flex items-center gap-2 text-xs text-muted-foreground"
+                              >
+                                <span
+                                  className={cn(
+                                    "size-2.5 rounded-full",
+                                    getFlowToneDotClass(tone)
+                                  )}
+                                />
+                                <span>{label}</span>
+                              </div>
+                            ))}
                           </div>
                         </div>
 
-                        <div className="pointer-events-none absolute inset-0 z-40">
-                          <div className="absolute top-4 right-4">
-                            <div className="flex flex-wrap items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-2 shadow-sm backdrop-blur">
-                              {(
-                                [
-                                  ["source", "数据来源"],
-                                  ["process", "处理节点"],
-                                  ["aggregate", "合并处理"],
-                                  ["result", "最终结果"],
-                                ] as const
-                              ).map(([tone, label]) => (
-                                <div
-                                  key={tone}
-                                  className="flex items-center gap-2 text-xs text-muted-foreground"
-                                >
-                                  <span
-                                    className={cn(
-                                      "size-2.5 rounded-full",
-                                      getFlowToneDotClass(tone)
-                                    )}
-                                  />
-                                  <span>{label}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="absolute right-4 bottom-4">
-                            <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-border bg-background/95 px-1 py-1 shadow-sm">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                className="size-7"
-                                aria-label="缩小画布"
-                                onClick={() => handleFlowZoom(flowZoom - 0.1)}
-                              >
-                                <MinusIcon className="size-3" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="h-7 min-w-12 px-2 text-[11px]"
-                                onClick={() => handleFlowZoom(1)}
-                              >
-                                {Math.round(flowZoom * 100)}%
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                className="size-7"
-                                aria-label="放大画布"
-                                onClick={() => handleFlowZoom(flowZoom + 0.1)}
-                              >
-                                <PlusIcon className="size-3" />
-                              </Button>
-                            </div>
+                        <div className="absolute right-4 bottom-4">
+                          <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-border bg-background/95 px-1 py-1 shadow-sm">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              className="size-7"
+                              aria-label="缩小画布"
+                              onClick={() => handleFlowZoom(flowZoom - 0.1)}
+                            >
+                              <MinusIcon className="size-3" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-7 min-w-12 px-2 text-[11px]"
+                              onClick={() => handleFlowZoom(1)}
+                            >
+                              {Math.round(flowZoom * 100)}%
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              className="size-7"
+                              aria-label="放大画布"
+                              onClick={() => handleFlowZoom(flowZoom + 0.1)}
+                            >
+                              <PlusIcon className="size-3" />
+                            </Button>
                           </div>
                         </div>
                       </div>
                     </div>
+                  </div>
 
-                    <aside
-                      aria-hidden={!selectedFlowNode || !selectedFlowNodeSummary}
-                      className={cn(
-                        "min-w-0 overflow-hidden transition-[opacity,transform,padding,border-color,background-color,box-shadow] duration-200 ease-out",
-                        selectedFlowNode && selectedFlowNodeSummary
-                          ? "translate-x-0 rounded-xl border border-border bg-muted/20 p-4 opacity-100 shadow-sm"
-                          : "pointer-events-none translate-x-3 border border-transparent bg-transparent p-0 opacity-0 shadow-none"
-                      )}
-                    >
-                      {selectedFlowNode && selectedFlowNodeSummary ? (
-                        <div className="animate-in fade-in-0 slide-in-from-right-2 duration-200">
-                          <div className="space-y-4">
+                  <aside
+                    aria-hidden={!selectedFlowNode || !selectedFlowNodeSummary}
+                    className={cn(
+                      "min-w-0 overflow-hidden transition-[opacity,transform,padding,border-color,background-color,box-shadow] duration-200 ease-out",
+                      selectedFlowNode && selectedFlowNodeSummary
+                        ? "translate-x-0 rounded-xl border border-border bg-muted/20 p-4 opacity-100 shadow-sm"
+                        : "pointer-events-none translate-x-3 border border-transparent bg-transparent p-0 opacity-0 shadow-none"
+                    )}
+                  >
+                    {selectedFlowNode && selectedFlowNodeSummary ? (
+                      <div className="animate-in duration-200 fade-in-0 slide-in-from-right-2">
+                        <div className="space-y-4">
                           <div className="flex items-start justify-between gap-3">
                             <h5 className="text-sm font-medium">
                               {selectedFlowNode.title}
@@ -1089,14 +1133,16 @@ function SessionArtifactPanel({
                                 上游流转
                               </div>
                               <div className="mt-2 flex flex-wrap gap-2">
-                                {selectedFlowNodeSummary.incoming.map((item) => (
-                                  <Badge
-                                    key={`incoming-${selectedFlowNode.id}-${item}`}
-                                    variant="outline"
-                                  >
-                                    {item}
-                                  </Badge>
-                                ))}
+                                {selectedFlowNodeSummary.incoming.map(
+                                  (item) => (
+                                    <Badge
+                                      key={`incoming-${selectedFlowNode.id}-${item}`}
+                                      variant="outline"
+                                    >
+                                      {item}
+                                    </Badge>
+                                  )
+                                )}
                               </div>
                             </div>
                           ) : null}
@@ -1107,77 +1153,80 @@ function SessionArtifactPanel({
                                 下游输出
                               </div>
                               <div className="mt-2 flex flex-wrap gap-2">
-                                {selectedFlowNodeSummary.outgoing.map((item) => (
-                                  <Badge
-                                    key={`outgoing-${selectedFlowNode.id}-${item}`}
-                                    variant="outline"
-                                  >
-                                    {item}
-                                  </Badge>
-                                ))}
+                                {selectedFlowNodeSummary.outgoing.map(
+                                  (item) => (
+                                    <Badge
+                                      key={`outgoing-${selectedFlowNode.id}-${item}`}
+                                      variant="outline"
+                                    >
+                                      {item}
+                                    </Badge>
+                                  )
+                                )}
                               </div>
                             </div>
                           ) : null}
                         </div>
+                      </div>
+                    ) : null}
+                  </aside>
+                </div>
+              ) : null}
+
+              {activeDetailTab === "rules" ? (
+                <div className="space-y-3">
+                  {artifact.process.rules.map((rule, index) => (
+                    <div
+                      key={`${artifact.title}-rule-${rule.title}`}
+                      className="rounded-lg border border-border bg-muted/20 px-4 py-4"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium">
+                          规则 {index + 1}
+                        </span>
+                        <h5 className="text-sm font-medium">{rule.title}</h5>
+                      </div>
+                      {rule.tags?.length ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {rule.tags.map((tag) => (
+                            <Badge
+                              key={`${rule.title}-${tag}`}
+                              variant="outline"
+                              className={cn(
+                                "font-normal",
+                                getRuleTagClassName(tag)
+                              )}
+                            >
+                              {tag}
+                            </Badge>
+                          ))}
                         </div>
                       ) : null}
-                    </aside>
-                  </div>
-                ) : null}
-                {activeProcessTab === "rules" ? (
-                  <div className="mt-4 space-y-3">
-                    {artifact.process.rules.map((rule, index) => (
-                      <div
-                        key={`${artifact.title}-rule-${rule.title}`}
-                        className="rounded-lg border border-border bg-muted/20 px-4 py-4"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="inline-flex rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium">
-                            规则 {index + 1}
-                          </span>
-                          <h5 className="text-sm font-medium">{rule.title}</h5>
-                        </div>
-                        {rule.tags?.length ? (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {rule.tags.map((tag) => (
-                              <Badge
-                                key={`${rule.title}-${tag}`}
-                                variant="outline"
-                                className={cn("font-normal", getRuleTagClassName(tag))}
-                              >
-                                {tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        ) : null}
-                        <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                          {rule.detail}
+                      <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                        {rule.detail}
+                      </p>
+                      {rule.note ? (
+                        <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                          {rule.note}
                         </p>
-                        {rule.note ? (
-                          <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                            {rule.note}
-                          </p>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                {activeProcessTab === "sql" ? (
-                  <pre className="mt-4 overflow-auto rounded-lg border border-border bg-muted/20 px-4 py-4 text-sm leading-7 text-muted-foreground">
-                    <code>{artifact.process.sql}</code>
-                  </pre>
-                ) : null}
-              </section>
-            </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {activeDetailTab === "sql" ? (
+                <pre className="overflow-auto rounded-lg border border-border bg-muted/20 px-4 py-4 text-sm leading-7 text-muted-foreground">
+                  <code>{artifact.process.sql}</code>
+                </pre>
+              ) : null}
+            </section>
           ) : (
             <div className="grid gap-4">
               <section className="rounded-xl border border-border bg-background p-4 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h4 className="text-sm font-medium">可视化图表</h4>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      基于当前明细表实时整理，让同一份结果能换一种方式继续看。
-                    </p>
                   </div>
                   <Badge variant="outline">{artifact.visual.chartLabel}</Badge>
                 </div>
@@ -1206,7 +1255,8 @@ function SessionArtifactPanel({
                   <h4 className="text-sm font-medium">关键结论</h4>
                   <div className="mt-3 space-y-3">
                     <div className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-3 text-sm text-muted-foreground">
-                      当前图表基于 {filteredTableRows.length} 条明细结果生成，继续筛选后这里会同步变化。
+                      当前图表基于 {filteredTableRows.length}{" "}
+                      条明细结果生成，继续筛选后这里会同步变化。
                     </div>
                     {artifact.visual.insights.map((insight) => (
                       <div
@@ -1229,7 +1279,8 @@ function SessionArtifactPanel({
                           className={cn(
                             "h-full",
                             item.tone === "primary" && "bg-foreground",
-                            item.tone === "secondary" && "bg-muted-foreground/70",
+                            item.tone === "secondary" &&
+                              "bg-muted-foreground/70",
                             item.tone === "tertiary" && "bg-muted-foreground/35"
                           )}
                           style={{ width: `${item.percent}%` }}
@@ -1374,8 +1425,8 @@ function decodePathSegment(segment: string) {
   }
 }
 
-type ArtifactTabId = "table" | "visual"
-type ArtifactProcessTabId = "flow" | "rules" | "sql"
+type ArtifactViewId = "detail" | "visual"
+type ArtifactDetailTabId = "data" | "flow" | "rules" | "sql"
 
 type ArtifactMetric = {
   label: string
@@ -1499,17 +1550,39 @@ type ArtifactContent = {
   process: ArtifactProcess
 }
 
-const artifactTabs: {
-  id: ArtifactTabId
+const artifactViewTabs: {
+  id: ArtifactViewId
   label: string
 }[] = [
   {
-    id: "table",
+    id: "detail",
     label: "明细表",
   },
   {
     id: "visual",
     label: "可视化图表",
+  },
+]
+
+const artifactDetailTabs: {
+  id: ArtifactDetailTabId
+  label: string
+}[] = [
+  {
+    id: "data",
+    label: "明细数据",
+  },
+  {
+    id: "flow",
+    label: "数据流转",
+  },
+  {
+    id: "rules",
+    label: "处理规则",
+  },
+  {
+    id: "sql",
+    label: "SQL",
   },
 ]
 
@@ -1570,7 +1643,8 @@ const requirementsOverdueArtifact = createArtifact({
     { label: "最长等待", value: "11 天", helper: "建议优先处理未分配记录" },
   ],
   table: {
-    caption: "这份明细已经对齐超期和未闭环口径，适合继续让 Agent 汇总到负责人或原因分类。",
+    caption:
+      "这份明细已经对齐超期和未闭环口径，适合继续让 Agent 汇总到负责人或原因分类。",
     filters: ["优先级：P0 / P1", "状态：未闭环", "排序：等待时长降序"],
     columns: ["需求单ID", "需求标题", "负责人", "阻塞原因", "状态", "已等待"],
     filterFields: [
@@ -1660,9 +1734,18 @@ const requirementsOverdueArtifact = createArtifact({
   },
   process: {
     flow: [
-      ["筛选高优未闭环需求", "先按 P0/P1 优先级与未闭环状态过滤需求记录，只保留当前需要跟进的范围。"],
-      ["补充负责人和阻塞原因", "关联负责人字段与阻塞原因标签，便于后续按人和问题类型继续汇总。"],
-      ["按等待时间排序输出", "计算等待时长后按降序整理结果，优先暴露等待时间最长的异常需求。"],
+      [
+        "筛选高优未闭环需求",
+        "先按 P0/P1 优先级与未闭环状态过滤需求记录，只保留当前需要跟进的范围。",
+      ],
+      [
+        "补充负责人和阻塞原因",
+        "关联负责人字段与阻塞原因标签，便于后续按人和问题类型继续汇总。",
+      ],
+      [
+        "按等待时间排序输出",
+        "计算等待时长后按降序整理结果，优先暴露等待时间最长的异常需求。",
+      ],
     ],
     graph: {
       stages: [
@@ -1758,7 +1841,11 @@ const requirementsOverdueArtifact = createArtifact({
         {
           from: "source",
           to: "enrich",
-          labels: ["demand_id 关联", "priority / status 过滤", "owner_id 补组别"],
+          labels: [
+            "demand_id 关联",
+            "priority / status 过滤",
+            "owner_id 补组别",
+          ],
         },
         {
           from: "enrich",
@@ -1778,32 +1865,28 @@ const requirementsOverdueArtifact = createArtifact({
         detail:
           "仅保留优先级为 P0 / P1 的需求单，并要求当前状态仍处于处理中、待确认或未闭环，已完成与已关闭记录不进入结果。",
         tags: ["priority", "P0/P1", "current_status"],
-        note:
-          "这一步先锁定排查范围，避免把普通优先级或已收口的需求混入当前明细。",
+        note: "这一步先锁定排查范围，避免把普通优先级或已收口的需求混入当前明细。",
       },
       {
         title: "等待时长计算规则",
         detail:
           "等待时长使用当前日期减去最近一次有效推进时间 `last_progress_date` 计算；若近 5 天无推进动作，则标记为超期候选。",
         tags: ["last_progress_date", "waiting_days", ">= 5 天"],
-        note:
-          "有效推进时间取最后一次状态变更、评论确认或负责人更新中的最新时间。",
+        note: "有效推进时间取最后一次状态变更、评论确认或负责人更新中的最新时间。",
       },
       {
         title: "负责人与阻塞原因补齐",
         detail:
           "通过 `owner_id` 关联负责人映射表得到负责组别，再通过 `blocker_code` 还原阻塞原因标签，确保同一需求在明细、图表和后续追问中口径一致。",
         tags: ["owner_id", "owner_group", "blocker_code", "blocker_reason"],
-        note:
-          "未匹配到负责人时统一落到“未分配”，方便单独筛选和优先处理。",
+        note: "未匹配到负责人时统一落到“未分配”，方便单独筛选和优先处理。",
       },
       {
         title: "结果排序与展示优先级",
         detail:
           "最终结果按未分配优先、等待时长降序、阻塞原因风险级别排序，优先把权限审批、数据接入和口径确认等高频卡点展示在前面。",
         tags: ["未分配优先", "waiting_days DESC", "风险标签排序"],
-        note:
-          "这样能让右侧明细表更像问题处理清单，而不是纯粹的原始记录罗列。",
+        note: "这样能让右侧明细表更像问题处理清单，而不是纯粹的原始记录罗列。",
       },
     ],
     sql: [
@@ -1830,7 +1913,11 @@ const requirementsSourceArtifact = createArtifact({
   description:
     "按本月来源维度整理需求量和环比变化，支持继续追问增长最快来源的明细。",
   metrics: [
-    { label: "来源类型", value: "4 类", helper: "业务运营、财务分析、项目管理、其他" },
+    {
+      label: "来源类型",
+      value: "4 类",
+      helper: "业务运营、财务分析、项目管理、其他",
+    },
     { label: "增长最快", value: "财务分析", helper: "环比提升 9 个百分点" },
     { label: "总需求量", value: "84 条", helper: "已按来源和模块拆开 mock" },
   ],
@@ -2059,32 +2146,28 @@ const requirementsSourceArtifact = createArtifact({
         detail:
           "来源不直接展示原始提单方，而是统一映射为业务运营、财务分析、项目管理、其他四类，避免同类角色拆散后影响占比判断。",
         tags: ["source_owner", "source_type", "统一归类"],
-        note:
-          "例如经营复盘、投放监控等业务团队统一归到“业务运营”，财务 BP、对账支持统一归到“财务分析”。",
+        note: "例如经营复盘、投放监控等业务团队统一归到“业务运营”，财务 BP、对账支持统一归到“财务分析”。",
       },
       {
         title: "时间范围与去噪规则",
         detail:
           "仅保留本月创建并成功入池的需求；测试单、撤销单、重复演示单不进入结果，确保来源占比反映真实业务需求。",
         tags: ["created_at", "本月", "is_test = 0", "status != 已撤销"],
-        note:
-          "这一步决定了结果能不能真实反映本月来源结构，而不是被无效记录拉偏。",
+        note: "这一步决定了结果能不能真实反映本月来源结构，而不是被无效记录拉偏。",
       },
       {
         title: "占比与环比计算方式",
         detail:
           "来源占比 = 当前来源需求数 / 本月总需求数；环比变化使用当前来源需求数与上月同口径需求数对比，输出百分点变化。",
         tags: ["share_rate", "mom_change", "百分点变化"],
-        note:
-          "环比变化与占比是两个不同概念，图表和表格里都会同时保留，避免继续追问时口径混淆。",
+        note: "环比变化与占比是两个不同概念，图表和表格里都会同时保留，避免继续追问时口径混淆。",
       },
       {
         title: "高优需求补充规则",
         detail:
           "明细表额外保留每个来源-模块组合下的 P0/P1 数量，方便直接看增长来源里是否同时带来高优压力。",
         tags: ["priority", "P0/P1", "high_priority_count"],
-        note:
-          "这一列也是后续继续追问“增长最快的来源是否更紧急”的关键依据。",
+        note: "这一列也是后续继续追问“增长最快的来源是否更紧急”的关键依据。",
       },
     ],
     sql: [
@@ -2128,7 +2211,8 @@ const requirementsOwnerArtifact = createArtifact({
     { label: "最长待办", value: "11 天", helper: "未分配记录需优先提醒" },
   ],
   table: {
-    caption: "这份结果适合继续要求按负责人展开具体需求，或只保留等待时间大于 5 天的记录。",
+    caption:
+      "这份结果适合继续要求按负责人展开具体需求，或只保留等待时间大于 5 天的记录。",
     filters: ["状态：待处理", "排序：平均等待天数降序", "范围：本月"],
     columns: [
       "负责人",
@@ -2237,7 +2321,12 @@ const requirementsOwnerArtifact = createArtifact({
               title: "需求主表",
               subtitle: "读取负责人、当前状态、优先级和创建时间。",
               tone: "source",
-              fields: ["demand_id", "owner_name", "current_status", "created_at"],
+              fields: [
+                "demand_id",
+                "owner_name",
+                "current_status",
+                "created_at",
+              ],
             },
             {
               id: "owner-progress-log",
@@ -2338,32 +2427,28 @@ const requirementsOwnerArtifact = createArtifact({
         detail:
           "只纳入当前状态为处理中、待确认、待排期、未闭环的需求，已完成与已关闭需求不参与负责人待办排行。",
         tags: ["current_status", "处理中", "待确认", "未闭环"],
-        note:
-          "这一步保证待办排行反映的是“当前真的还压在负责人身上的事”，而不是历史累计处理量。",
+        note: "这一步保证待办排行反映的是“当前真的还压在负责人身上的事”，而不是历史累计处理量。",
       },
       {
         title: "等待时长计算口径",
         detail:
           "平均等待按每条需求的 `today - last_progress_date` 计算后再做负责人聚合，避免直接用创建时间放大正在推进中的需求。",
         tags: ["last_progress_date", "waiting_days", "AVG(waiting_days)"],
-        note:
-          "如果没有推进记录，则退化使用创建时间作为等待起点。",
+        note: "如果没有推进记录，则退化使用创建时间作为等待起点。",
       },
       {
         title: "高优需求与阻塞数补充",
         detail:
           "排行表除了待处理需求数，还额外保留 P0/P1 数量与阻塞数，用于区分“量大但可推进”和“量不大但卡点集中”的负责人。",
         tags: ["priority", "P0/P1", "block_flag"],
-        note:
-          "这也是后续继续追问“先提醒谁”时最有用的两列。",
+        note: "这也是后续继续追问“先提醒谁”时最有用的两列。",
       },
       {
         title: "状态标签判断",
         detail:
           "平均等待超过 6 天或阻塞数超过 1 的负责人标记为“需关注”；未分配或等待超过 10 天标记为“异常”。",
         tags: ["> 6 天", "block_count > 1", "未分配", "异常"],
-        note:
-          "这样右侧明细表既能用来排序，也能直接当做行动列表。",
+        note: "这样右侧明细表既能用来排序，也能直接当做行动列表。",
       },
     ],
     sql: [
@@ -2453,7 +2538,14 @@ const budgetFreezeArtifact = createArtifact({
   table: {
     caption: "建议优先人工复核金额较大和冻结时间较长的预算单。",
     filters: ["状态：冻结 / 待释放", "时长：>14 天", "排序：金额降序"],
-    columns: ["预算单号", "渠道", "申请金额", "当前阶段", "冻结时长", "风险级别"],
+    columns: [
+      "预算单号",
+      "渠道",
+      "申请金额",
+      "当前阶段",
+      "冻结时长",
+      "风险级别",
+    ],
     rows: [
       ["BDG-021", "渠道 C", "280 万", "冻结中", "19 天", "高"],
       ["BDG-034", "渠道 F", "164 万", "待释放", "16 天", "高"],
@@ -2534,8 +2626,7 @@ const budgetWarningArtifact = createArtifact({
 const executionSlaArtifact = createArtifact({
   scopeLabel: "执行情况",
   title: "需求单执行 SLA",
-  description:
-    "按部门整理创建到完成的 SLA 达成情况，突出达成率偏低的部门。",
+  description: "按部门整理创建到完成的 SLA 达成情况，突出达成率偏低的部门。",
   metrics: [
     { label: "整体达成率", value: "83%", helper: "本期 mock 汇总" },
     { label: "最低部门", value: "数据平台", helper: "当前主要受权限等待影响" },
@@ -2669,8 +2760,103 @@ const executionBlockArtifact = createArtifact({
   },
 })
 
+function createOfficialAssetArtifact(
+  asset: OfficialAssetRecord
+): ArtifactContent {
+  const labelColumn = asset.draftColumns[0]
+  const valueColumn = findOfficialAssetValueColumn(asset)
+  const distributionColumn = findOfficialAssetDistributionColumn(asset)
+
+  return createArtifact({
+    scopeLabel: `官方数据资产 · ${asset.categoryLabel}`,
+    title: `${asset.name} 明细数据`,
+    description: asset.description,
+    metrics: [
+      {
+        label: "明细行数",
+        value: `${asset.draftRows.length} 条`,
+        helper: "基于当前资产 mock 明细生成",
+      },
+      {
+        label: "字段数量",
+        value: `${asset.draftColumns.length} 个`,
+        helper: asset.fieldSummary,
+      },
+      {
+        label: "分析方式",
+        value: "AI 问答生成",
+        helper: "可继续追加筛选、图表或口径问题",
+      },
+    ],
+    table: {
+      caption: `当前已根据「${asset.name}」整理出可继续追问的明细结果。`,
+      filters: [
+        `资产：${asset.name}`,
+        `分类：${asset.categoryLabel}`,
+        "模式：AI 明细分析",
+      ],
+      columns: asset.draftColumns,
+      rows: asset.draftRows,
+    },
+    visual: {
+      chartLabel: valueColumn ? `${valueColumn} 对比` : "明细分布",
+      labelColumn,
+      valueColumn,
+      distributionColumn,
+      insights: [
+        `当前围绕「${asset.name}」生成明细结果，可继续追问字段解释、异常记录或过滤条件。`,
+        asset.description,
+        `核心字段包括：${asset.fieldSummary}。`,
+      ],
+      series: [
+        {
+          label: asset.name,
+          value: `${asset.draftRows.length} 条`,
+          percent: 100,
+        },
+      ],
+      distribution: [
+        { label: asset.categoryLabel, percent: 100, tone: "primary" },
+      ],
+    },
+  })
+}
+
+function findOfficialAssetValueColumn(asset: OfficialAssetRecord) {
+  return asset.draftColumns.find((column, index) => {
+    if (index === 0) {
+      return false
+    }
+
+    return asset.draftRows.some(
+      (row) => parseArtifactNumericValue(row[index] ?? "") > 0
+    )
+  })
+}
+
+function findOfficialAssetDistributionColumn(asset: OfficialAssetRecord) {
+  const preferredColumn = asset.draftColumns.find((column) =>
+    /状态|类型|场景|部门|业务线|渠道|币种/.test(column)
+  )
+
+  return preferredColumn ?? asset.draftColumns[1]
+}
+
+function matchOfficialAssetArtifact(prompt: string) {
+  const matchedAsset = officialAssets.find((asset) =>
+    prompt.includes(asset.name)
+  )
+
+  return matchedAsset ? createOfficialAssetArtifact(matchedAsset) : null
+}
+
 function getArtifactContent(session: WorkspaceSession): ArtifactContent {
   const normalizedPrompt = getFirstMessageText(session, "user")
+  const officialAssetArtifact = matchOfficialAssetArtifact(normalizedPrompt)
+
+  if (officialAssetArtifact) {
+    return officialAssetArtifact
+  }
 
   if (hasKeyword(normalizedPrompt, ["资金", "余额"])) {
     return fundsArtifact
@@ -2780,9 +2966,18 @@ function createArtifact({
 
 function createDefaultProcessFlow(title: string): [string, string][] {
   return [
-    ["提取原始数据", `从与“${title}”相关的明细表中取数，并保留本次分析需要的核心字段。`],
-    ["按口径聚合整理", "根据当前问题的筛选条件和分组维度完成聚合、去重和排序。"],
-    ["输出结果表格", "将可继续追问的结果字段整理成右侧表格，供后续图示和下钻使用。"],
+    [
+      "提取原始数据",
+      `从与“${title}”相关的明细表中取数，并保留本次分析需要的核心字段。`,
+    ],
+    [
+      "按口径聚合整理",
+      "根据当前问题的筛选条件和分组维度完成聚合、去重和排序。",
+    ],
+    [
+      "输出结果表格",
+      "将可继续追问的结果字段整理成右侧表格，供后续图示和下钻使用。",
+    ],
   ]
 }
 
@@ -2822,15 +3017,11 @@ function createDefaultFilterFields(
   return sortedColumns.map((column, index) => {
     const uniqueValues = Array.from(
       new Set(
-        rows
-          .map((row) => String(row[column] ?? "").trim())
-          .filter(Boolean)
+        rows.map((row) => String(row[column] ?? "").trim()).filter(Boolean)
       )
     )
     const shouldUseText =
-      index === 0 ||
-      /ID|号|标题|名称/.test(column) ||
-      uniqueValues.length > 8
+      index === 0 || /ID|号|标题|名称/.test(column) || uniqueValues.length > 8
 
     if (shouldUseText) {
       return {
@@ -2981,7 +3172,9 @@ function filterArtifactTableRows(
     normalizedEntries.every(([fieldId, value]) => {
       const field = filterFields.find((item) => item.id === fieldId)
       const targetColumn = field?.columnId ?? fieldId
-      const rowValue = String(row[targetColumn] ?? "").trim().toLowerCase()
+      const rowValue = String(row[targetColumn] ?? "")
+        .trim()
+        .toLowerCase()
       const filterValue = value.trim().toLowerCase()
 
       if (!filterValue) {
@@ -3112,9 +3305,15 @@ function buildArtifactVisualDistribution(
   const categoryColumn =
     visual.distributionColumn ??
     columns.find((column) =>
-      ["状态", "风险级别", "来源", "部门", "负责人", "渠道", "当前阶段"].includes(
-        column
-      )
+      [
+        "状态",
+        "风险级别",
+        "来源",
+        "部门",
+        "负责人",
+        "渠道",
+        "当前阶段",
+      ].includes(column)
     )
 
   if (!categoryColumn || !rows.length) {
@@ -3234,11 +3433,7 @@ function getRuleTagClassName(tag: string) {
     return "border-slate-200 bg-slate-50 text-slate-700"
   }
 
-  if (
-    />=|>|异常|风险|超期|需关注|排序|未分配优先|block_count\s*>/i.test(
-      tag
-    )
-  ) {
+  if (/>=|>|异常|风险|超期|需关注|排序|未分配优先|block_count\s*>/i.test(tag)) {
     return "border-rose-200 bg-rose-50 text-rose-700"
   }
 
@@ -3292,8 +3487,8 @@ function createFlowBoardLayout(
 ): FlowBoardLayout {
   const stageCount = graph.stages.length
   const boardPaddingX = 28
-  const boardPaddingTop = 92
-  const boardPaddingBottom = 48
+  const boardPaddingTop = 72
+  const boardPaddingBottom = 24
   const minStageWidth = 240
   const maxStageWidth = 340
   const minStageGap = 28
@@ -3334,7 +3529,7 @@ function createFlowBoardLayout(
   })
   const contentHeight = Math.max(
     ...stageLayouts.map((layout) => layout.stageContentHeight),
-    420
+    320
   )
   const boardHeight = boardPaddingTop + contentHeight + boardPaddingBottom
 
@@ -3342,8 +3537,8 @@ function createFlowBoardLayout(
     ({ stage, nodeHeights, stageContentHeight }, stageIndex) => {
       const stageX =
         offsetX + boardPaddingX + stageIndex * (stageWidth + stageGap)
-      let currentY =
-        boardPaddingTop + Math.max((contentHeight - stageContentHeight) / 2, 0)
+      const verticalSlack = Math.max(contentHeight - stageContentHeight, 0)
+      let currentY = boardPaddingTop + Math.min(verticalSlack * 0.25, 28)
 
       return stage.nodes.map((node, nodeIndex) => {
         const nextNode = {
@@ -3366,11 +3561,7 @@ function createFlowBoardLayout(
       id: stage.id,
       title: stage.title,
       index: stageIndex,
-      x:
-        offsetX +
-        boardPaddingX +
-        stageIndex * (stageWidth + stageGap) +
-        4,
+      x: offsetX + boardPaddingX + stageIndex * (stageWidth + stageGap) + 4,
       y: stageLabelTop,
     }
   })
@@ -3412,11 +3603,9 @@ function createFlowBoardLayout(
       Math.max(...fromNodes.map((node) => node.x + node.width)) + 18
     const toStageMidX = Math.min(...toNodes.map((node) => node.x)) - 18
     const fromStageMidY =
-      average(
-        fromNodes.map((node) => node.y + node.height / 2)
-      ) ?? boardHeight / 2
+      average(fromNodes.map((node) => node.y + 32)) ?? boardHeight / 2
     const toStageMidY =
-      average(toNodes.map((node) => node.y + node.height / 2)) ?? boardHeight / 2
+      average(toNodes.map((node) => node.y + 32)) ?? boardHeight / 2
     const labelWidth = Math.max(connection.labels.length * 112, 240)
 
     return {
@@ -3514,6 +3703,26 @@ function hasKeyword(text: string, keywords: string[]) {
   return keywords.every((keyword) => text.includes(keyword))
 }
 
+function sessionHasGeneratedArtifacts(session: WorkspaceSession) {
+  return session.messages.some((message) => {
+    if (message.role !== "assistant") {
+      return false
+    }
+
+    const text = getMessageText(message)
+
+    if (!text) {
+      return false
+    }
+
+    return (
+      text.includes("已生成右侧 Artifacts") ||
+      text.includes("明细表") ||
+      text.includes("可视化图表")
+    )
+  })
+}
+
 function getFirstMessageText(
   session: WorkspaceSession,
   role: "user" | "assistant"
@@ -3523,7 +3732,9 @@ function getFirstMessageText(
   return getMessageText(message) ?? session.title
 }
 
-function getMessageText(message: WorkspaceSession["messages"][number] | undefined) {
+function getMessageText(
+  message: WorkspaceSession["messages"][number] | undefined
+) {
   const textPart = message?.parts.find((part) => part.type === "text")
   return textPart?.type === "text" ? textPart.text : undefined
 }

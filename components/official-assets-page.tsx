@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { DownloadIcon, SearchIcon } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
+import { useWorkspace } from "@/components/workspace-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -23,6 +23,7 @@ import {
   type CategoryId,
   type OfficialAssetRecord,
 } from "@/lib/official-assets"
+import { getPendingSessionPromptKey } from "@/lib/pending-session-prompt"
 
 const defaultRecentSearches = [
   "预算执行总表",
@@ -35,11 +36,7 @@ const defaultRecentSearches = [
   "结算单执行明细",
 ]
 
-function exportCsv(
-  filename: string,
-  columns: string[],
-  rows: string[][]
-) {
+function exportCsv(filename: string, columns: string[], rows: string[][]) {
   const escapeField = (value: string) => {
     if (
       value.includes(",") ||
@@ -70,6 +67,7 @@ function exportCsv(
 
 export function OfficialAssetsPage() {
   const router = useRouter()
+  const { createTemporarySession, isHydrated } = useWorkspace()
   const [draftQuery, setDraftQuery] = useState("")
   const [query, setQuery] = useState("")
   const [recentSearches, setRecentSearches] = useState(defaultRecentSearches)
@@ -108,7 +106,7 @@ export function OfficialAssetsPage() {
         activeCategory === "all" || asset.categoryId === activeCategory
       const matchesQuery =
         !normalizedQuery ||
-        [asset.name, asset.sourceSystem, asset.description]
+        [asset.name, asset.description]
           .join(" ")
           .toLowerCase()
           .includes(normalizedQuery)
@@ -124,6 +122,21 @@ export function OfficialAssetsPage() {
     const start = (safeAssetPage - 1) * pageSize
     return filteredAssets.slice(start, start + pageSize)
   }, [filteredAssets, safeAssetPage])
+
+  const startAssetDetailSession = (asset: OfficialAssetRecord) => {
+    if (!isHydrated) {
+      return
+    }
+
+    const prompt = `查询 ${asset.name} 的明细数据`
+    const session = createTemporarySession({ prompt })
+
+    window.sessionStorage.setItem(
+      getPendingSessionPromptKey(session.id),
+      prompt
+    )
+    router.push(`/sessions/${session.routeSegment}`)
+  }
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -248,8 +261,9 @@ export function OfficialAssetsPage() {
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead>数据资产</TableHead>
-                      <TableHead>来源系统</TableHead>
-                      <TableHead className="w-[140px] text-right">操作</TableHead>
+                      <TableHead className="w-[140px] text-right">
+                        操作
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -265,30 +279,15 @@ export function OfficialAssetsPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">{asset.sourceSystem}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end">
                               <Button
                                 type="button"
-                                variant="ghost"
+                                variant="outline"
                                 size="sm"
-                                onClick={() =>
-                                  router.push(`/assets/official/${asset.id}`)
-                                }
+                                onClick={() => startAssetDetailSession(asset)}
+                                disabled={!isHydrated}
                               >
-                                详情
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  exportCsv(asset.name, asset.draftColumns, asset.draftRows)
-                                }
-                              >
-                                <DownloadIcon className="size-4" />
-                                导出
+                                查看明细
                               </Button>
                             </div>
                           </TableCell>
@@ -296,7 +295,7 @@ export function OfficialAssetsPage() {
                       ))
                     ) : (
                       <TableRow className="hover:bg-transparent">
-                        <TableCell colSpan={3} className="py-12 text-center">
+                        <TableCell colSpan={2} className="py-12 text-center">
                           <div className="space-y-2">
                             <p className="font-medium">没有匹配的数据资产</p>
                             <p className="text-sm text-muted-foreground">
@@ -402,7 +401,9 @@ export function OfficialAssetDetailPage({
                           <TableCell
                             key={`${asset.id}-${rowIndex}-${cellIndex}`}
                             className={cn(
-                              cellIndex === 0 ? "font-medium" : "text-muted-foreground"
+                              cellIndex === 0
+                                ? "font-medium"
+                                : "text-muted-foreground"
                             )}
                           >
                             {cell}
