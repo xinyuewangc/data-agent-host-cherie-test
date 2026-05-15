@@ -37,16 +37,23 @@ type NavItem = {
   isActive?: boolean
   showAction?: boolean
   onNewSession?: () => void
+  onSelect?: () => void
+  onSave?: () => void
+  onToggleMcp?: () => void
   onRename?: () => void
   onDelete?: () => void
+  mcpActionLabel?: string
   items?: {
     title: string
     url: string
     icon?: ReactNode
     isActive?: boolean
     showAction?: boolean
+    onSave?: () => void
+    onToggleMcp?: () => void
     onRename?: () => void
     onDelete?: () => void
+    mcpActionLabel?: string
   }[]
 }
 
@@ -125,6 +132,23 @@ function NavMenuItem({
 }) {
   const hasSubItems = Boolean(item.items?.length)
   const usesProjectActions = item.actionType === "project"
+  const menuButton = (
+    <SidebarMenuButton
+      tooltip={item.title}
+      isActive={item.isActive}
+      onClick={item.onSelect}
+      render={
+        item.onSelect ? (
+          <button type="button" />
+        ) : (
+          <Link href={item.url ?? "#"} />
+        )
+      }
+    >
+      {item.icon}
+      <span>{item.title}</span>
+    </SidebarMenuButton>
+  )
 
   if (hasSubItems) {
     return (
@@ -184,6 +208,7 @@ function NavMenuItem({
                     isSubItem
                     itemTitle={subItem.title}
                     actionIcon={actionIcon}
+                    onSave={subItem.onSave}
                     onRename={subItem.onRename}
                     onDelete={subItem.onDelete}
                   />
@@ -198,27 +223,23 @@ function NavMenuItem({
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton
-        tooltip={item.title}
-        isActive={item.isActive}
-        render={<Link href={item.url ?? "#"} />}
-      >
-        {item.icon}
-        <span>{item.title}</span>
-      </SidebarMenuButton>
+      {menuButton}
       {item.showAction ? (
         usesProjectActions ? (
           <ProjectActions
             itemTitle={item.title}
             actionIcon={actionIcon}
             onNewSession={item.onNewSession}
+            onToggleMcp={item.onToggleMcp}
             onRename={item.onRename}
             onDelete={item.onDelete}
+            mcpActionLabel={item.mcpActionLabel}
           />
         ) : (
           <SessionActions
             itemTitle={item.title}
             actionIcon={actionIcon}
+            onSave={item.onSave}
             onRename={item.onRename}
             onDelete={item.onDelete}
           />
@@ -234,12 +255,14 @@ function SessionActions({
   isSubItem = false,
   onDelete,
   onRename,
+  onSave,
 }: {
   itemTitle: string
   actionIcon?: ReactNode
   isSubItem?: boolean
   onDelete?: () => void
   onRename?: () => void
+  onSave?: () => void
 }) {
   return (
     <DropdownMenu>
@@ -257,8 +280,11 @@ function SessionActions({
       >
         {actionIcon}
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="right" align="start" className="w-28">
+      <DropdownMenuContent side="right" align="start" className="w-36">
         <DropdownMenuGroup>
+          {onSave ? (
+            <DropdownMenuItem onClick={onSave}>保存为数据资产</DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onClick={onDelete}>
             删除
@@ -275,15 +301,19 @@ function ProjectActions({
   onNewSession,
   onRename,
   onDelete,
+  onToggleMcp,
+  mcpActionLabel = "发布MCP",
 }: {
   itemTitle: string
   actionIcon?: ReactNode
   onNewSession?: () => void
   onRename?: () => void
   onDelete?: () => void
+  onToggleMcp?: () => void
+  mcpActionLabel?: string
 }) {
   return (
-    <div className="absolute top-1.5 right-1 z-10 flex items-center gap-1 opacity-0 transition-opacity group-has-[>[data-sidebar=menu-button]:hover]/menu-item:opacity-100 peer-hover/menu-button:opacity-100 hover:opacity-100 focus-within:opacity-100 group-data-[collapsible=icon]:hidden">
+    <div className="absolute top-1.5 right-1 z-10 flex items-center gap-1 opacity-0 transition-opacity group-has-[>[data-sidebar=menu-button]:hover]/menu-item:opacity-100 group-data-[collapsible=icon]:hidden peer-hover/menu-button:opacity-100 focus-within:opacity-100 hover:opacity-100">
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -297,8 +327,12 @@ function ProjectActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent side="right" align="start" className="w-32">
           <DropdownMenuGroup>
+            {onToggleMcp ? (
+              <DropdownMenuItem onClick={onToggleMcp}>
+                {mcpActionLabel}
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem>
-            <DropdownMenuItem>发布MCP</DropdownMenuItem>
             <DropdownMenuItem variant="destructive" onClick={onDelete}>
               删除
             </DropdownMenuItem>

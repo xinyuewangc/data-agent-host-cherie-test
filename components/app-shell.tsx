@@ -15,6 +15,14 @@ import {
 import { AppSidebar } from "@/components/app-sidebar"
 import { Badge } from "@/components/ui/badge"
 import {
+  ConfirmActionDialog,
+  DeleteActionDialog,
+  RenameActionDialog,
+  type ConfirmAction,
+  type DeleteAction,
+  type RenameAction,
+} from "@/components/workspace-action-dialogs"
+import {
   WorkspaceProvider,
   useWorkspace,
 } from "@/components/workspace-provider"
@@ -26,15 +34,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,6 +73,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { appRoutes, getRouteByPath } from "@/lib/navigation"
 import { officialAssets, type OfficialAssetRecord } from "@/lib/official-assets"
 import { cn } from "@/lib/utils"
+import { createDataAssetTitle } from "@/lib/workspace-title"
 import type { WorkspaceSession } from "@/lib/workspace-mock"
 import {
   ChevronDownIcon,
@@ -81,7 +81,6 @@ import {
   ChevronUpIcon,
   DownloadIcon,
   EllipsisIcon,
-  FileTextIcon,
   MinusIcon,
   MoreHorizontalIcon,
   PanelRightCloseIcon,
@@ -90,8 +89,8 @@ import {
   RotateCcwIcon,
   SaveIcon,
   SearchIcon,
-  SquareDashedMousePointerIcon,
   Share2Icon,
+  SquareDashedMousePointerIcon,
   XIcon,
 } from "lucide-react"
 
@@ -222,111 +221,119 @@ function SessionHeaderActions({
   const router = useRouter()
   const { getProject, saveTemporarySession, setProjectMcpSharing } =
     useWorkspace()
+  const [renameAction, setRenameAction] = useState<RenameAction | null>(null)
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
   const project = session.projectId ? getProject(session.projectId) : undefined
   const isMcpShared = Boolean(project?.isMcpShared)
-  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
-  const shareDialogTitle = isMcpShared ? "取消MCP分享" : "通过MCP分享"
-  const shareDialogDescription = isMcpShared
-    ? "是否取消分享？"
-    : "将当前Artifacts以MCP形式分享。"
-  const shareButtonLabel = isMcpShared ? "取消MCP分享" : "通过MCP分享"
+  const canShareMcp = Boolean(project && !session.isTemporary)
+  const mcpActionLabel = isMcpShared ? "取消MCP分享" : "发布MCP"
 
-  function handleSaveTemporarySession() {
-    const savedSession = saveTemporarySession(session.id)
+  function handleSaveAsAsset() {
+    setRenameAction({
+      title: "保存为数据资产",
+      label: null,
+      defaultValue: createDataAssetTitle(session.title),
+      placeholder: "输入数据资产名称",
+      onConfirm: (title) => {
+        const savedSession = saveTemporarySession(session.id, { title })
 
-    if (savedSession?.projectId) {
-      router.push(
-        `/assets/my/${savedSession.projectId}/${savedSession.routeSegment}`
-      )
-    }
+        if (savedSession?.projectId) {
+          router.push(
+            `/assets/my/${savedSession.projectId}/${savedSession.routeSegment}`
+          )
+        }
+      },
+    })
   }
 
-  function handleConfirmMcpSharing() {
+  function handleToggleMcpSharing() {
     if (!project) {
       return
     }
 
-    setProjectMcpSharing(project.id, !isMcpShared)
-    setIsShareDialogOpen(false)
+    setConfirmAction({
+      title: mcpActionLabel,
+      description: isMcpShared
+        ? `确定要取消“${session.title}”的 MCP 分享吗？`
+        : `确定要将“${session.title}”发布为 MCP 吗？`,
+      confirmLabel: isMcpShared ? "取消分享" : "发布",
+      onConfirm: () => {
+        setProjectMcpSharing(project.id, !isMcpShared)
+      },
+    })
   }
 
   return (
-    <div className="flex shrink-0 items-center gap-2">
-      {session.isTemporary ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="保存为数据资产"
-                onClick={handleSaveTemporarySession}
-              />
-            }
-          >
-            <SaveIcon />
-          </TooltipTrigger>
-          <TooltipContent>保存为数据资产</TooltipContent>
-        </Tooltip>
-      ) : null}
-
-      <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={shareButtonLabel}
-                disabled={!project}
-                onClick={() => setIsShareDialogOpen(true)}
-              />
-            }
-          >
-            <Share2Icon />
-          </TooltipTrigger>
-          <TooltipContent>{shareButtonLabel}</TooltipContent>
-        </Tooltip>
-        <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>{shareDialogTitle}</DialogTitle>
-            <DialogDescription>{shareDialogDescription}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>
-              取消
-            </DialogClose>
-            <Button type="button" onClick={handleConfirmMcpSharing}>
-              确定
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={
-                isArtifactOpen ? "关闭 Artifacts 面板" : "打开 Artifacts 面板"
+    <>
+      <div className="flex shrink-0 items-center gap-2">
+        {session.isTemporary ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="保存为数据资产"
+                  onClick={handleSaveAsAsset}
+                />
               }
-              aria-pressed={isArtifactOpen}
-              onClick={() => onArtifactOpenChange(!isArtifactOpen)}
-            />
-          }
-        >
-          {isArtifactOpen ? <PanelRightCloseIcon /> : <PanelRightOpenIcon />}
-        </TooltipTrigger>
-        <TooltipContent>
-          {isArtifactOpen ? "关闭 Artifacts 面板" : "打开 Artifacts 面板"}
-        </TooltipContent>
-      </Tooltip>
-    </div>
+            >
+              <SaveIcon />
+            </TooltipTrigger>
+            <TooltipContent>保存为数据资产</TooltipContent>
+          </Tooltip>
+        ) : null}
+
+        {canShareMcp ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant={isMcpShared ? "secondary" : "ghost"}
+                  size="icon-sm"
+                  aria-label={mcpActionLabel}
+                  aria-pressed={isMcpShared}
+                  onClick={handleToggleMcpSharing}
+                />
+              }
+            >
+              <Share2Icon />
+            </TooltipTrigger>
+            <TooltipContent>{mcpActionLabel}</TooltipContent>
+          </Tooltip>
+        ) : null}
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={isArtifactOpen ? "关闭结果面板" : "打开结果面板"}
+                aria-pressed={isArtifactOpen}
+                onClick={() => onArtifactOpenChange(!isArtifactOpen)}
+              />
+            }
+          >
+            {isArtifactOpen ? <PanelRightCloseIcon /> : <PanelRightOpenIcon />}
+          </TooltipTrigger>
+          <TooltipContent>
+            {isArtifactOpen ? "关闭结果面板" : "打开结果面板"}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+      <RenameActionDialog
+        action={renameAction}
+        onOpenChange={(isOpen) => !isOpen && setRenameAction(null)}
+      />
+      <ConfirmActionDialog
+        action={confirmAction}
+        onOpenChange={(isOpen) => !isOpen && setConfirmAction(null)}
+      />
+    </>
   )
 }
 
@@ -439,6 +446,10 @@ function SessionArtifactPanel({
     activeArtifactView === "detail" && activeDetailTab === "flow"
 
   useEffect(() => {
+    if (!isFlowDetailView) {
+      return
+    }
+
     const element = flowViewportRef.current
 
     if (!element) {
@@ -446,8 +457,8 @@ function SessionArtifactPanel({
     }
 
     function updateViewportSize(nextWidth: number, nextHeight: number) {
-      setFlowViewportWidth(Math.max(Math.floor(nextWidth) - 24, 0))
-      setFlowViewportHeight(Math.max(Math.floor(nextHeight) - 24, 0))
+      setFlowViewportWidth(Math.max(Math.floor(nextWidth) - 32, 0))
+      setFlowViewportHeight(Math.max(Math.floor(nextHeight) - 32, 0))
     }
 
     const initialRect = element.getBoundingClientRect()
@@ -464,7 +475,48 @@ function SessionArtifactPanel({
     observer.observe(element)
 
     return () => observer.disconnect()
-  }, [])
+  }, [isFlowDetailView])
+
+  useEffect(() => {
+    const viewport = flowViewportRef.current
+
+    if (
+      !isFlowDetailView ||
+      !viewport ||
+      !flowViewportWidth ||
+      !flowViewportHeight ||
+      !flowBoard.width ||
+      !flowBoard.height
+    ) {
+      return
+    }
+
+    const nextZoom = getFlowFitZoom(
+      flowBoard.width,
+      flowBoard.height,
+      flowViewportWidth,
+      flowViewportHeight
+    )
+
+    setFlowZoom(nextZoom)
+
+    window.requestAnimationFrame(() => {
+      viewport.scrollLeft = Math.max(
+        (viewport.scrollWidth - viewport.clientWidth) / 2,
+        0
+      )
+      viewport.scrollTop = Math.max(
+        (viewport.scrollHeight - viewport.clientHeight) / 2,
+        0
+      )
+    })
+  }, [
+    flowBoard.height,
+    flowBoard.width,
+    flowViewportHeight,
+    flowViewportWidth,
+    isFlowDetailView,
+  ])
 
   function handleTableFilterChange(fieldId: string, value: string) {
     setDraftTableFilters((current) => ({
@@ -576,11 +628,26 @@ function SessionArtifactPanel({
           : "pointer-events-none flex h-full min-h-0 min-w-0 translate-x-4 flex-col overflow-hidden border-l border-border bg-background opacity-0 transition-[opacity,transform] duration-300 ease-out"
       }
     >
-      <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-4">
-        <div className="flex min-w-0 items-center gap-2">
-          <FileTextIcon className="size-4 shrink-0 text-muted-foreground" />
-          <h2 className="truncate text-sm font-medium">Artifacts</h2>
-        </div>
+      <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-3">
+        <Tabs
+          value={activeArtifactView}
+          onValueChange={(value) =>
+            setActiveArtifactView(value as ArtifactViewId)
+          }
+          className="min-w-0"
+        >
+          <TabsList className="h-9 min-w-0 justify-start gap-1 rounded-none bg-transparent p-0">
+            {artifactViewTabs.map((tab) => (
+              <TabsTrigger
+                key={tab.id}
+                value={tab.id}
+                className="h-8 min-w-0 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground data-[active]:bg-muted data-[active]:text-foreground data-[active]:shadow-none"
+              >
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         <div className="flex shrink-0 items-center gap-1">
           <Tooltip>
             <TooltipTrigger
@@ -589,7 +656,7 @@ function SessionArtifactPanel({
                   type="button"
                   variant={isPickingArtifactContext ? "secondary" : "ghost"}
                   size="icon-sm"
-                  aria-label="选择 Artifact 元素作为上下文"
+                  aria-label="选择元素作为上下文"
                   aria-pressed={isPickingArtifactContext}
                   onClick={() =>
                     setIsPickingArtifactContext((isPicking) => !isPicking)
@@ -602,7 +669,7 @@ function SessionArtifactPanel({
             <TooltipContent>
               {isPickingArtifactContext
                 ? "退出选择上下文元素"
-                : "选择 Artifact 元素作为上下文"}
+                : "选择元素作为上下文"}
             </TooltipContent>
           </Tooltip>
 
@@ -613,7 +680,7 @@ function SessionArtifactPanel({
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Artifacts 操作"
+                  aria-label="更多操作"
                 />
               }
             >
@@ -639,30 +706,6 @@ function SessionArtifactPanel({
             isFlowDetailView && "min-h-full"
           )}
         >
-          <section className="-mx-4 flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-border px-4 pb-4 lg:-mx-5 lg:px-5">
-            <h3 className="text-lg font-semibold tracking-tight">
-              {activeArtifactView === "detail" ? "明细表" : "可视化图表"}
-            </h3>
-            <Tabs
-              value={activeArtifactView}
-              onValueChange={(value) =>
-                setActiveArtifactView(value as ArtifactViewId)
-              }
-            >
-              <TabsList className="h-auto rounded-lg bg-muted p-0.5">
-                {artifactViewTabs.map((tab) => (
-                  <TabsTrigger
-                    key={tab.id}
-                    value={tab.id}
-                    className="rounded-md px-2.5 py-1 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-                  >
-                    {tab.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          </section>
-
           {activeArtifactView === "detail" ? (
             <section
               className={cn(
@@ -670,40 +713,30 @@ function SessionArtifactPanel({
                 isFlowDetailView && "flex min-h-0 flex-1 flex-col"
               )}
             >
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <Tabs
                   value={activeDetailTab}
                   onValueChange={(value) =>
                     setActiveDetailTab(value as ArtifactDetailTabId)
                   }
                 >
-                  <TabsList className="h-auto rounded-lg bg-muted p-0.5">
+                  <TabsList className="h-8 rounded-md bg-muted p-0.5">
                     {artifactDetailTabs.map((tab) => (
                       <TabsTrigger
                         key={tab.id}
                         value={tab.id}
-                        className="rounded-md px-2.5 py-1 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+                        className="h-7 min-w-20 rounded-[6px] px-2.5 py-0 text-xs font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs"
                       >
                         {tab.label}
                       </TabsTrigger>
                     ))}
                   </TabsList>
                 </Tabs>
-                {activeDetailTab === "data" ? (
-                  <Button
-                    type="button"
-                    className="h-8 gap-2 rounded-lg px-3 text-sm"
-                    onClick={handleExportRows}
-                  >
-                    <DownloadIcon className="size-4" />
-                    导出明细表
-                  </Button>
-                ) : null}
               </div>
               {activeDetailTab === "data" ? (
                 <div className="grid gap-3">
                   {hasTableFilters ? (
-                    <section className="rounded-xl border border-border bg-muted/10 p-4">
+                    <section className="rounded-lg border border-border bg-muted/10 p-4">
                       <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
                         {visibleTableFilterFields.map((field) => (
                           <label key={field.id} className="space-y-2">
@@ -720,7 +753,7 @@ function SessionArtifactPanel({
                                   )
                                 }
                                 placeholder={field.placeholder}
-                                className="h-8 rounded-lg px-2.5 text-sm placeholder:text-muted-foreground"
+                                className="h-8 rounded-md px-2.5 text-sm placeholder:text-muted-foreground"
                               />
                             ) : (
                               <Select
@@ -729,7 +762,7 @@ function SessionArtifactPanel({
                                   handleTableFilterChange(field.id, value ?? "")
                                 }
                               >
-                                <SelectTrigger>
+                                <SelectTrigger className="rounded-md">
                                   <SelectValue
                                     placeholder={field.placeholder}
                                   />
@@ -778,7 +811,7 @@ function SessionArtifactPanel({
                           <Button
                             type="button"
                             variant="outline"
-                            className="h-8 gap-2 rounded-lg px-3 text-sm"
+                            className="h-8 gap-2 rounded-md px-3 text-sm"
                             onClick={handleResetFilters}
                           >
                             <RotateCcwIcon className="size-4" />
@@ -786,7 +819,7 @@ function SessionArtifactPanel({
                           </Button>
                           <Button
                             type="button"
-                            className="h-8 gap-2 rounded-lg px-3 text-sm"
+                            className="h-8 gap-2 rounded-md px-3 text-sm"
                             onClick={handleApplyFilters}
                           >
                             <SearchIcon className="size-4" />
@@ -797,7 +830,18 @@ function SessionArtifactPanel({
                     </section>
                   ) : null}
 
-                  <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+                  <section className="overflow-hidden rounded-lg border border-border bg-background shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/10 px-4 py-3">
+                      <h4 className="text-sm font-medium">明细数据</h4>
+                      <Button
+                        type="button"
+                        className="h-8 gap-2 rounded-md px-3 text-sm"
+                        onClick={handleExportRows}
+                      >
+                        <DownloadIcon className="size-4" />
+                        导出明细表
+                      </Button>
+                    </div>
                     <div className="overflow-auto">
                       <Table>
                         <TableHeader>
@@ -857,22 +901,22 @@ function SessionArtifactPanel({
               {activeDetailTab === "flow" ? (
                 <div
                   className={cn(
-                    "min-h-0 grid gap-4 transition-[grid-template-columns] duration-300 ease-out",
-                    isFlowDetailView && "flex-1",
+                    "grid min-h-0 gap-4 transition-[grid-template-columns] duration-300 ease-out",
+                    isFlowDetailView && "h-full flex-1",
                     selectedFlowNode
                       ? "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px]"
                       : "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_0px]"
                   )}
                 >
                   <div className="min-h-0 min-w-0">
-                    <div className="relative flex min-h-0 flex-1">
+                    <div className="relative flex h-full min-h-0">
                       <div
                         ref={flowViewportRef}
                         onWheel={handleFlowViewportWheel}
-                        className="relative h-full min-h-[560px] flex-1 overflow-auto rounded-xl border border-dashed border-border bg-[radial-gradient(circle,_rgba(0,0,0,0.06)_1px,_transparent_1px)] [background-size:16px_16px] p-4"
+                        className="relative h-full min-h-0 flex-1 overflow-auto rounded-xl border border-dashed border-border bg-[radial-gradient(circle,_rgba(0,0,0,0.06)_1px,_transparent_1px)] [background-size:16px_16px] p-4"
                       >
                         <div
-                          className="relative flex items-start justify-center rounded-[28px]"
+                          className="relative flex items-center justify-center rounded-[28px]"
                           style={{
                             width: Math.max(
                               flowBoard.width * flowZoom,
@@ -885,117 +929,125 @@ function SessionArtifactPanel({
                           }}
                         >
                           <div
-                            className="relative origin-top-left"
+                            className="relative shrink-0"
                             style={{
-                              width: flowBoard.width,
-                              height: flowBoard.height,
-                              transform: `scale(${flowZoom})`,
+                              width: flowBoard.width * flowZoom,
+                              height: flowBoard.height * flowZoom,
                             }}
                           >
-                            <svg
-                              className="pointer-events-none absolute inset-0 z-10"
-                              width={flowBoard.width}
-                              height={flowBoard.height}
-                              viewBox={`0 0 ${flowBoard.width} ${flowBoard.height}`}
-                              fill="none"
+                            <div
+                              className="absolute left-0 top-0 origin-top-left"
+                              style={{
+                                width: flowBoard.width,
+                                height: flowBoard.height,
+                                transform: `scale(${flowZoom})`,
+                              }}
                             >
-                              {flowBoard.edges.map((edge) => (
-                                <Fragment key={edge.id}>
-                                  {edge.paths.map((path) => (
-                                    <Fragment key={path.id}>
-                                      <path
-                                        d={path.d}
-                                        stroke={path.stroke}
-                                        strokeWidth="2"
-                                        strokeOpacity="0.18"
-                                        strokeDasharray="6 10"
-                                        strokeLinecap="round"
-                                      />
-                                      <path
-                                        d={path.d}
-                                        stroke={path.stroke}
-                                        strokeWidth="2.4"
-                                        strokeDasharray="10 14"
-                                        strokeLinecap="round"
-                                      >
-                                        <animate
-                                          attributeName="stroke-dashoffset"
-                                          from="24"
-                                          to="0"
-                                          dur="1.15s"
-                                          repeatCount="indefinite"
-                                        />
-                                      </path>
-                                      <circle r="3.5" fill={path.stroke}>
-                                        <animateMotion
-                                          dur="2.6s"
-                                          repeatCount="indefinite"
-                                          path={path.d}
-                                        />
-                                      </circle>
-                                    </Fragment>
-                                  ))}
-                                  <path
-                                    d={edge.axisPath}
-                                    stroke="rgba(17,24,39,0.18)"
-                                    strokeWidth="1.5"
-                                    strokeDasharray="2 10"
-                                    strokeLinecap="round"
-                                  />
-                                </Fragment>
-                              ))}
-                            </svg>
-
-                            {flowBoard.nodes.map((node) => (
-                              <button
-                                key={node.id}
-                                type="button"
-                                className={cn(
-                                  "absolute z-30 rounded-2xl border bg-background px-4 py-4 text-left shadow-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-md",
-                                  getFlowToneCardClass(node.tone),
-                                  selectedFlowNode?.id === node.id &&
-                                    "ring-2 ring-foreground/10"
-                                )}
-                                style={{
-                                  left: node.x,
-                                  top: node.y,
-                                  width: node.width,
-                                  minHeight: node.height,
-                                }}
-                                onClick={() =>
-                                  setSelectedFlowNodeId((current) =>
-                                    current === node.id ? null : node.id
-                                  )
-                                }
+                              <svg
+                                className="pointer-events-none absolute inset-0 z-10"
+                                width={flowBoard.width}
+                                height={flowBoard.height}
+                                viewBox={`0 0 ${flowBoard.width} ${flowBoard.height}`}
+                                fill="none"
                               >
-                                <span className="absolute top-8 -left-1.5 size-3 rounded-full border border-background bg-background shadow-sm" />
-                                <span className="absolute top-8 -right-1.5 size-3 rounded-full border border-background bg-background shadow-sm" />
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                      <span
-                                        className={cn(
-                                          "size-2.5 rounded-full",
-                                          getFlowToneDotClass(node.tone)
-                                        )}
-                                      />
-                                      <div className="text-sm font-medium">
-                                        {node.title}
+                                {flowBoard.edges.map((edge) => (
+                                  <Fragment key={edge.id}>
+                                    {edge.paths.map((path) => (
+                                      <Fragment key={path.id}>
+                                        <path
+                                          d={path.d}
+                                          stroke={path.stroke}
+                                          strokeWidth="2"
+                                          strokeOpacity="0.18"
+                                          strokeDasharray="6 10"
+                                          strokeLinecap="round"
+                                        />
+                                        <path
+                                          d={path.d}
+                                          stroke={path.stroke}
+                                          strokeWidth="2.4"
+                                          strokeDasharray="10 14"
+                                          strokeLinecap="round"
+                                        >
+                                          <animate
+                                            attributeName="stroke-dashoffset"
+                                            from="24"
+                                            to="0"
+                                            dur="1.15s"
+                                            repeatCount="indefinite"
+                                          />
+                                        </path>
+                                        <circle r="3.5" fill={path.stroke}>
+                                          <animateMotion
+                                            dur="2.6s"
+                                            repeatCount="indefinite"
+                                            path={path.d}
+                                          />
+                                        </circle>
+                                      </Fragment>
+                                    ))}
+                                    <path
+                                      d={edge.axisPath}
+                                      stroke="rgba(17,24,39,0.18)"
+                                      strokeWidth="1.5"
+                                      strokeDasharray="2 10"
+                                      strokeLinecap="round"
+                                    />
+                                  </Fragment>
+                                ))}
+                              </svg>
+
+                              {flowBoard.nodes.map((node) => (
+                                <button
+                                  key={node.id}
+                                  type="button"
+                                  className={cn(
+                                    "absolute z-30 rounded-2xl border bg-background px-4 py-4 text-left shadow-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-md",
+                                    getFlowToneCardClass(node.tone),
+                                    selectedFlowNode?.id === node.id &&
+                                      "ring-2 ring-foreground/10"
+                                  )}
+                                  style={{
+                                    left: node.x,
+                                    top: node.y,
+                                    width: node.width,
+                                    minHeight: node.height,
+                                  }}
+                                  onClick={() =>
+                                    setSelectedFlowNodeId((current) =>
+                                      current === node.id ? null : node.id
+                                    )
+                                  }
+                                >
+                                  <span className="absolute top-8 -left-1.5 size-3 rounded-full border border-background bg-background shadow-sm" />
+                                  <span className="absolute top-8 -right-1.5 size-3 rounded-full border border-background bg-background shadow-sm" />
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="space-y-1">
+                                      <div className="flex items-center gap-2">
+                                        <span
+                                          className={cn(
+                                            "size-2.5 rounded-full",
+                                            getFlowToneDotClass(node.tone)
+                                          )}
+                                        />
+                                        <div className="text-sm font-medium">
+                                          {node.title}
+                                        </div>
+                                      </div>
+                                      <div className="text-xs leading-5 text-muted-foreground">
+                                        {node.subtitle}
                                       </div>
                                     </div>
-                                    <div className="text-xs leading-5 text-muted-foreground">
-                                      {node.subtitle}
-                                    </div>
+                                    <Badge
+                                      variant="outline"
+                                      className="shrink-0 bg-background/90"
+                                    >
+                                      {getFlowToneLabel(node.tone)}
+                                    </Badge>
                                   </div>
-                                  <Badge
-                                    variant="outline"
-                                    className="shrink-0 bg-background/90"
-                                  >
-                                    {getFlowToneLabel(node.tone)}
-                                  </Badge>
-                                </div>
-                              </button>
-                            ))}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1325,68 +1377,163 @@ function SessionArtifactPanel({
 
 function SessionHeaderTitle({ session }: { session: WorkspaceSession }) {
   const router = useRouter()
-  const { deleteSession, getProject, renameSession } = useWorkspace()
+  const {
+    deleteProject,
+    deleteSession,
+    getProject,
+    renameProject,
+    renameSession,
+    saveTemporarySession,
+    setProjectMcpSharing,
+  } = useWorkspace()
   const project = session.projectId ? getProject(session.projectId) : undefined
+  const [renameAction, setRenameAction] = useState<RenameAction | null>(null)
+  const [deleteAction, setDeleteAction] = useState<DeleteAction | null>(null)
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
   const parentTitle = session.isTemporary
     ? "临时会话"
     : (project?.title ?? "项目会话")
   const shouldShowParent =
     session.isTemporary || (project?.sessionIds.length ?? 0) > 1
+  const usesProjectActions = Boolean(project && project.sessionIds.length === 1)
+  const isMcpShared = Boolean(project?.isMcpShared)
 
-  function handleRename() {
-    const nextTitle = window.prompt("重命名会话", session.title)
+  function handleSaveAsAsset() {
+    setRenameAction({
+      title: "保存为数据资产",
+      label: null,
+      defaultValue: createDataAssetTitle(session.title),
+      placeholder: "输入数据资产名称",
+      onConfirm: (title) => {
+        const savedSession = saveTemporarySession(session.id, { title })
 
-    if (nextTitle === null) {
+        if (savedSession?.projectId) {
+          router.push(
+            `/assets/my/${savedSession.projectId}/${savedSession.routeSegment}`
+          )
+        }
+      },
+    })
+  }
+
+  function handleToggleMcpSharing() {
+    if (!project) {
       return
     }
 
-    renameSession(session.id, nextTitle)
+    setConfirmAction({
+      title: isMcpShared ? "取消MCP分享" : "发布MCP",
+      description: isMcpShared
+        ? `确定要取消“${session.title}”的 MCP 分享吗？`
+        : `确定要将“${session.title}”发布为 MCP 吗？`,
+      confirmLabel: isMcpShared ? "取消分享" : "发布",
+      onConfirm: () => {
+        setProjectMcpSharing(project.id, !isMcpShared)
+      },
+    })
+  }
+
+  function handleRename() {
+    setRenameAction({
+      title: usesProjectActions ? "重命名数据资产" : "重命名会话",
+      description: usesProjectActions
+        ? "更新后，侧边栏和当前数据资产标题会同步使用新名称。"
+        : "更新后，顶部标题和侧边栏会同步使用新名称。",
+      defaultValue: session.title,
+      placeholder: usesProjectActions ? "输入数据资产名称" : "输入会话名称",
+      onConfirm: (nextTitle) => {
+        if (usesProjectActions && project) {
+          renameProject(project.id, nextTitle)
+        }
+
+        renameSession(session.id, nextTitle)
+      },
+    })
   }
 
   function handleDelete() {
-    deleteSession(session.id)
-    router.replace(appRoutes.newSession.path)
+    setDeleteAction({
+      title: usesProjectActions ? "删除数据资产" : "删除会话",
+      description: usesProjectActions
+        ? `确定要删除“${session.title}”吗？相关会话也会从侧边栏移除。`
+        : `确定要删除“${session.title}”吗？此操作会将它从侧边栏移除。`,
+      onConfirm: () => {
+        if (usesProjectActions && project) {
+          deleteProject(project.id)
+        } else {
+          deleteSession(session.id)
+        }
+
+        router.replace(appRoutes.newSession.path)
+      },
+    })
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-1">
-      {shouldShowParent ? (
-        <>
-          <span className="truncate text-sm font-normal text-muted-foreground">
-            {parentTitle}
-          </span>
-          <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground" />
-        </>
-      ) : null}
+    <>
       <div className="flex min-w-0 items-center gap-1">
-        <h1 className="truncate text-sm font-normal tracking-normal">
-          {session.title}
-        </h1>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`${session.title} 操作`}
-                className="shrink-0"
-              />
-            }
-          >
-            <EllipsisIcon />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="bottom" align="start" className="w-28">
-            <DropdownMenuGroup>
-              <DropdownMenuItem onClick={handleRename}>重命名</DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onClick={handleDelete}>
-                删除
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {shouldShowParent ? (
+          <>
+            <span className="truncate text-sm font-normal text-muted-foreground">
+              {parentTitle}
+            </span>
+            <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground" />
+          </>
+        ) : null}
+        <div className="flex min-w-0 items-center gap-1">
+          <h1 className="truncate text-sm font-normal tracking-normal">
+            {session.title}
+          </h1>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`${session.title} 更多操作`}
+                  className="shrink-0"
+                />
+              }
+            >
+              <EllipsisIcon />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="bottom" align="start" className="w-36">
+              <DropdownMenuGroup>
+                {session.isTemporary ? (
+                  <DropdownMenuItem onClick={handleSaveAsAsset}>
+                    保存为数据资产
+                  </DropdownMenuItem>
+                ) : null}
+                {usesProjectActions ? (
+                  <DropdownMenuItem onClick={handleToggleMcpSharing}>
+                    {isMcpShared ? "取消MCP分享" : "发布MCP"}
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem onClick={handleRename}>
+                  重命名
+                </DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onClick={handleDelete}>
+                  删除
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
-    </div>
+      <RenameActionDialog
+        action={renameAction}
+        onOpenChange={(isOpen) => !isOpen && setRenameAction(null)}
+      />
+      <DeleteActionDialog
+        action={deleteAction}
+        onOpenChange={(isOpen) => !isOpen && setDeleteAction(null)}
+      />
+      <ConfirmActionDialog
+        action={confirmAction}
+        onOpenChange={(isOpen) => !isOpen && setConfirmAction(null)}
+      />
+    </>
   )
 }
 
@@ -3689,6 +3836,29 @@ function clampNumber(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
 }
 
+function getFlowFitZoom(
+  boardWidth: number,
+  boardHeight: number,
+  viewportWidth: number,
+  viewportHeight: number
+) {
+  if (!boardWidth || !boardHeight || !viewportWidth || !viewportHeight) {
+    return 1
+  }
+
+  return clampNumber(
+    Number(
+      Math.min(
+        viewportWidth / boardWidth,
+        viewportHeight / boardHeight,
+        1
+      ).toFixed(3)
+    ),
+    FLOW_MIN_ZOOM,
+    FLOW_MAX_ZOOM
+  )
+}
+
 function normalizeProcessStep(
   step: ArtifactProcessStep | [string, string]
 ): ArtifactProcessStep {
@@ -3717,6 +3887,7 @@ function sessionHasGeneratedArtifacts(session: WorkspaceSession) {
 
     return (
       text.includes("已生成右侧 Artifacts") ||
+      text.includes("已生成右侧结果") ||
       text.includes("明细表") ||
       text.includes("可视化图表")
     )

@@ -43,7 +43,10 @@ type WorkspaceContextValue = {
   deleteSession: (sessionId: string) => void
   renameProject: (projectId: string, title: string) => void
   renameSession: (sessionId: string, title: string) => void
-  saveTemporarySession: (sessionId: string) => WorkspaceSession | undefined
+  saveTemporarySession: (
+    sessionId: string,
+    options?: { title?: string }
+  ) => WorkspaceSession | undefined
   setProjectMcpSharing: (projectId: string, isMcpShared: boolean) => void
   temporarySessions: WorkspaceSession[]
   updateSessionMessages: (sessionId: string, messages: UIMessage[]) => void
@@ -304,26 +307,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const saveTemporarySession = useCallback(
-    (sessionId: string) => {
+    (sessionId: string, options?: { title?: string }) => {
       const session = state.sessions[sessionId]
 
       if (!session || !session.isTemporary) {
         return undefined
       }
 
+      const title = options?.title?.trim() || session.title || "保存的项目"
       const projectId = uniqueProjectId(
-        slugify(session.title || "saved-project"),
+        slugify(title || "saved-project"),
         state.projects
       )
       const project: WorkspaceProject = {
         id: projectId,
-        title: session.title || "保存的项目",
+        title,
         description: "从临时会话保存的数据查询项目。",
         isMcpShared: false,
         sessionIds: [sessionId],
       }
       const savedSession: WorkspaceSession = {
         ...session,
+        title,
         isTemporary: false,
         projectId,
         routeSegment: session.routeSegment || session.id,
@@ -512,17 +517,57 @@ function restoreWorkspaceState(state: WorkspaceState): WorkspaceState | null {
   }
 
   if (state.version === WORKSPACE_STATE_VERSION) {
-    return state
+    return normalizeWorkspaceResultCopy(state)
   }
 
   if (state.version > WORKSPACE_STATE_VERSION) {
     return null
   }
 
-  return {
+  return normalizeWorkspaceResultCopy({
     ...migrateProjectsToSingleSessionFolders(state),
     version: WORKSPACE_STATE_VERSION,
+  })
+}
+
+function normalizeWorkspaceResultCopy(state: WorkspaceState): WorkspaceState {
+  return {
+    ...state,
+    sessions: Object.fromEntries(
+      Object.entries(state.sessions).map(([sessionId, session]) => [
+        sessionId,
+        {
+          ...session,
+          messages: session.messages.map(normalizeMessageResultCopy),
+        },
+      ])
+    ),
   }
+}
+
+function normalizeMessageResultCopy(message: UIMessage): UIMessage {
+  let didChange = false
+  const parts = message.parts.map((part) => {
+    if (part.type !== "text" || typeof part.text !== "string") {
+      return part
+    }
+
+    const nextText = part.text
+      .replaceAll("已生成右侧 Artifacts", "已生成右侧结果")
+      .replaceAll("Artifacts", "结果")
+
+    if (nextText === part.text) {
+      return part
+    }
+
+    didChange = true
+    return {
+      ...part,
+      text: nextText,
+    }
+  })
+
+  return didChange ? { ...message, parts } : message
 }
 
 function migrateProjectsToSingleSessionFolders(

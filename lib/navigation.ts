@@ -5,7 +5,7 @@ export const appRoutes = {
     path: "/sessions/new",
     title: "新建会话",
     description:
-      "发起新的 Agent 会话，后续用于查询、加工企业内部明细表并生成 Artifacts。",
+      "发起新的 Agent 会话，后续用于查询、加工企业内部明细表并生成结果。",
     breadcrumbs: ["新建会话"],
   },
   search: {
@@ -23,8 +23,7 @@ export const appRoutes = {
   myAssets: {
     path: "/assets/my",
     title: "我的数据资产",
-    description:
-      "展示用户保存后的数据资产入口，当前每个 folder 对应一条会话。",
+    description: "展示用户保存后的数据资产入口，当前每个 folder 对应一条会话。",
     breadcrumbs: ["我的数据资产"],
   },
   requirements: {
